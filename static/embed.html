@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>集装箱维修稽核结果</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --card: #ffffff;
+      --line: #e4e9f1;
+      --text: #182233;
+      --muted: #687386;
+      --blue: #246bfd;
+      --green: #0b9f6e;
+      --green-bg: #e9f8f2;
+      --amber: #c37a05;
+      --amber-bg: #fff6df;
+      --red: #d34242;
+      --red-bg: #fff0f0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); }
+    button { font: inherit; }
+    .page { max-width: 1240px; margin: 0 auto; padding: 24px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; color: white; background: linear-gradient(145deg, #246bfd, #5a8bff); font-weight: 800; }
+    h1 { margin: 0; font-size: 22px; }
+    .subtitle { margin-top: 3px; color: var(--muted); font-size: 13px; }
+    .actions { display: flex; gap: 8px; }
+    .btn { border: 1px solid var(--line); background: white; color: var(--text); padding: 9px 14px; border-radius: 10px; cursor: pointer; }
+    .btn:hover { border-color: #b6c5df; background: #f9fbff; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 24px rgba(31, 50, 81, .06); }
+    .hero { padding: 22px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 20px; }
+    .hero-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .container { font-weight: 800; font-size: 25px; letter-spacing: .5px; }
+    .task-id { margin-top: 8px; color: var(--muted); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+    .badge { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 700; }
+    .badge.verified, .badge.succeeded { color: var(--green); background: var(--green-bg); }
+    .badge.partial, .badge.running, .badge.pending { color: var(--amber); background: var(--amber-bg); }
+    .badge.missing, .badge.failed, .badge.cancelled, .badge.unsupported { color: var(--red); background: var(--red-bg); }
+    .conclusion { min-width: 172px; text-align: center; border-left: 1px solid var(--line); padding-left: 24px; }
+    .conclusion strong { display: block; font-size: 22px; margin-top: 5px; }
+    .conclusion .verified { color: var(--green); }
+    .conclusion .partial { color: var(--amber); }
+    .conclusion .missing, .conclusion .failed, .conclusion .cancelled { color: var(--red); }
+    .muted { color: var(--muted); }
+    .progress { height: 9px; background: #edf1f7; border-radius: 99px; overflow: hidden; margin-top: 16px; }
+    .progress > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #246bfd, #6a98ff); border-radius: inherit; transition: width .35s ease; }
+    .progress-meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0; }
+    .stat { padding: 16px 18px; }
+    .stat b { display: block; font-size: 26px; margin-top: 4px; }
+    .stat .verified { color: var(--green); }
+    .stat .partial { color: var(--amber); }
+    .stat .missing, .stat .unsupported { color: var(--red); }
+    .section-title { font-size: 17px; margin: 24px 0 12px; }
+    .items { display: grid; gap: 12px; }
+    .item { overflow: hidden; }
+    .item-head { display: grid; grid-template-columns: 54px minmax(170px, 1.2fr) minmax(100px, .55fr) minmax(100px, .55fr) minmax(140px, 1fr) auto; gap: 14px; align-items: center; padding: 17px 18px; }
+    .item-no { font-weight: 800; font-size: 17px; }
+    .primary { font-weight: 750; }
+    .secondary { margin-top: 3px; color: var(--muted); font-size: 12px; }
+    .item-body { border-top: 1px solid var(--line); background: #fafcff; padding: 16px 18px 18px; }
+    .note { padding: 11px 13px; border-radius: 10px; background: white; border: 1px solid var(--line); line-height: 1.55; font-size: 13px; }
+    .evidence-title { margin: 15px 0 10px; font-weight: 700; font-size: 13px; }
+    .photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 12px; }
+    .photo { margin: 0; padding: 8px; border-radius: 12px; border: 1px solid var(--line); background: white; cursor: zoom-in; text-align: left; min-width: 0; }
+    .photo img { width: 100%; aspect-ratio: 4/3; display: block; object-fit: cover; border-radius: 8px; background: #eef2f7; }
+    .photo figcaption { margin-top: 7px; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .labels { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+    .label { color: #3c5f9d; background: #eef4ff; border-radius: 5px; padding: 3px 6px; font-size: 10px; }
+    .empty, .error { padding: 46px 24px; text-align: center; }
+    .empty .icon, .error .icon { font-size: 38px; margin-bottom: 10px; }
+    .error { color: var(--red); }
+    .notice { margin-top: 12px; border: 1px solid #dce5f4; background: #f7faff; border-radius: 10px; padding: 11px 13px; color: #49607f; font-size: 12px; }
+    .overlay { position: fixed; inset: 0; display: none; place-items: center; padding: 20px; background: rgba(12, 20, 33, .82); z-index: 20; cursor: zoom-out; }
+    .overlay.show { display: grid; }
+    .overlay img { max-width: 96vw; max-height: 94vh; object-fit: contain; border-radius: 10px; box-shadow: 0 18px 60px rgba(0,0,0,.35); }
+    @media (max-width: 820px) {
+      .page { padding: 14px; }
+      .hero { grid-template-columns: 1fr; }
+      .conclusion { text-align: left; border-left: 0; border-top: 1px solid var(--line); padding: 14px 0 0; }
+      .summary { grid-template-columns: repeat(2, 1fr); }
+      .item-head { grid-template-columns: 38px 1fr auto; }
+      .item-head > :nth-child(3), .item-head > :nth-child(4), .item-head > :nth-child(5) { grid-column: 2 / -1; }
+      .topbar { align-items: flex-start; }
+      .actions { flex-direction: column; }
+    }
+    @media print {
+      body { background: white; }
+      .page { max-width: none; padding: 0; }
+      .actions, .notice { display: none !important; }
+      .card { box-shadow: none; break-inside: avoid; }
+      .item-body { display: block !important; }
+      .photo { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">AI</div>
+        <div><h1>集装箱维修稽核结果</h1><div class="subtitle">只读鉴定报告</div></div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="refreshBtn" type="button">刷新</button>
+        <button class="btn" id="printBtn" type="button">打印报告</button>
+      </div>
+    </header>
+    <section id="content" class="card empty" aria-live="polite">
+      <div class="icon">⏳</div><div>正在验证访问凭证并加载鉴定结果…</div>
+    </section>
+  </main>
+  <div class="overlay" id="overlay" role="dialog" aria-label="查看证据照片">
+    <img id="overlayImage" alt="证据照片大图">
+  </div>
+  <script>
+    (() => {
+      'use strict';
+      const content = document.getElementById('content');
+      const taskId = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
+      const storageKey = `audit-embed-token:${taskId}`;
+      const hashParams = new URLSearchParams(location.hash.replace(/^#/, ''));
+      const hashToken = hashParams.get('token') || '';
+      if (hashToken) {
+        sessionStorage.setItem(storageKey, hashToken);
+        history.replaceState(null, '', location.pathname + location.search);
+      }
+      const token = hashToken || sessionStorage.getItem(storageKey) || '';
+      let timer = null;
+      let lastPayload = null;
+      const imageUrls = new Map();
+
+      const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      })[char]);
+      const statusText = (value) => ({
+        pending: '等待处理', running: '处理中', succeeded: '处理完成', failed: '处理失败',
+        cancelled: '已取消', VERIFIED: '全部通过', PARTIAL: '部分通过', MISSING: '证据不足',
+        verified: '已验证', partial: '部分验证', missing: '缺少证据', unsupported: '证据不支持',
+        overclaimed: '疑似多报'
+      })[value] || value || '未知';
+      const statusClass = (value) => String(value || '').toLowerCase();
+      const formatTime = (value) => value ? new Date(value).toLocaleString('zh-CN') : '—';
+
+      async function api(path) {
+        const response = await fetch(path, {
+          headers: { Authorization: `Embed ${token}` },
+          cache: 'no-store',
+          credentials: 'omit'
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const message = body.detail || body.error || `HTTP ${response.status}`;
+          const error = new Error(message);
+          error.status = response.status;
+          throw error;
+        }
+        return body;
+      }
+
+      function fail(message, expired = false) {
+        if (timer) clearTimeout(timer);
+        content.className = 'card error';
+        content.innerHTML = `<div class="icon">${expired ? '🔒' : '⚠️'}</div>
+          <strong>${expired ? '访问链接已失效' : '无法加载鉴定结果'}</strong>
+          <div class="muted" style="margin-top:8px">${esc(message)}</div>`;
+      }
+
+      function collectEvidence(item, photoMap) {
+        const result = new Map();
+        const add = (entry) => {
+          const id = typeof entry === 'string' ? entry : entry && entry.photo_id;
+          if (!id || result.has(id)) return;
+          const detail = typeof entry === 'object' ? entry : {};
+          result.set(id, {
+            photo_id: id,
+            filename: detail.photo_name || detail.filename || photoMap.get(id)?.filename || id,
+            labels: Array.isArray(detail.labels) ? detail.labels : []
+          });
+        };
+        ['matched_photos_detail', 'core_photos_detail', 'photo_evidence', 'reference_photos',
+          'matched_photos', 'core_photos'].forEach(key => (item[key] || []).forEach(add));
+        return [...result.values()];
+      }
+
+      function renderPhoto(photo) {
+        return `<figure class="photo" data-photo-id="${esc(photo.photo_id)}" tabindex="0" role="button">
+          <img alt="${esc(photo.filename)}" loading="lazy">
+          <figcaption title="${esc(photo.filename)}">${esc(photo.filename)}</figcaption>
+          ${photo.labels.length ? `<div class="labels">${photo.labels.map(label => `<span class="label">${esc(label)}</span>`).join('')}</div>` : ''}
+        </figure>`;
+      }
+
+      function renderItem(item, photoMap) {
+        const status = item.verification_status || 'missing';
+        const evidence = collectEvidence(item, photoMap);
+        const location = item.location_code || '—';
+        const component = item.component || '—';
+        const componentName = item.component_name || '';
+        const damage = [item.damage_code, item.damage_name].filter(Boolean).join(' · ') || '—';
+        const match = item.strong_match ? '强匹配' : (item.match_source && item.match_source !== 'none' ? item.match_source : '—');
+        return `<article class="card item">
+          <div class="item-head">
+            <div class="item-no">#${esc(item.item_no)}</div>
+            <div><div class="primary">${esc(component)}</div><div class="secondary">${esc(componentName)}</div></div>
+            <div><div class="primary">${esc(damage)}</div><div class="secondary">损伤类型</div></div>
+            <div><div class="primary">${esc(location)}</div><div class="secondary">位置编码</div></div>
+            <div><div class="primary">${esc(item.description || '—')}</div><div class="secondary">维修说明</div></div>
+            <span class="badge ${statusClass(status)}">${esc(statusText(status))}</span>
+          </div>
+          <div class="item-body">
+            <div class="note"><strong>鉴定依据：</strong>${esc(item.auditor_notes || '暂无补充说明')}
+              <span class="muted"> · 匹配方式：${esc(match)}</span></div>
+            <div class="evidence-title">证据照片（${evidence.length}）</div>
+            ${evidence.length ? `<div class="photos">${evidence.map(renderPhoto).join('')}</div>` : '<div class="muted">本项没有匹配到证据照片</div>'}
+          </div>
+        </article>`;
+      }
+
+      function render(payload) {
+        lastPayload = payload;
+        const task = payload.task;
+        const report = payload.report;
+        const progress = task.progress || { current: 0, total: 10 };
+        const percent = task.status === 'succeeded' ? 100 : Math.round((progress.current || 0) / (progress.total || 10) * 100);
+        const recommendation = task.final_recommendation || task.status;
+        const photoMap = new Map((task.photos || []).map(photo => [photo.photo_id, photo]));
+        (report?.photos || []).forEach(photo => photoMap.set(photo.photo_id, photo));
+        const summary = report?.verification_summary || {};
+        const items = report?.item_verifications || [];
+
+        content.className = '';
+        content.innerHTML = `<section class="card hero">
+          <div>
+            <div class="hero-title"><span class="container">${esc(task.container_number || '等待识别箱号')}</span>
+              <span class="badge ${statusClass(task.status)}">${esc(statusText(task.status))}</span></div>
+            <div class="task-id">${esc(task.task_id)}</div>
+            <div class="progress"><i style="width:${percent}%"></i></div>
+            <div class="progress-meta"><span>${esc(progress.detail || statusText(task.status))}</span><span>${percent}%</span></div>
+          </div>
+          <div class="conclusion"><span class="muted">总体结论</span><strong class="${statusClass(recommendation)}">${esc(statusText(recommendation))}</strong></div>
+        </section>
+        ${task.status === 'failed' ? `<section class="card error" style="margin-top:16px"><strong>${esc(task.error?.code || '处理失败')}</strong><div style="margin-top:6px">${esc(task.error?.message || '')}</div></section>` : ''}
+        ${report ? `<section class="summary">
+          <div class="card stat"><span class="muted">已验证</span><b class="verified">${Number(summary.verified || 0)}</b></div>
+          <div class="card stat"><span class="muted">部分验证</span><b class="partial">${Number(summary.partial || 0)}</b></div>
+          <div class="card stat"><span class="muted">缺少证据</span><b class="missing">${Number(summary.missing || 0)}</b></div>
+          <div class="card stat"><span class="muted">证据不支持</span><b class="unsupported">${Number(summary.unsupported || 0) + Number(summary.overclaimed || 0)}</b></div>
+        </section>
+        <h2 class="section-title">逐项鉴定明细（${items.length}）</h2>
+        <section class="items">${items.map(item => renderItem(item, photoMap)).join('')}</section>` :
+        `<section class="card empty" style="margin-top:16px"><div class="icon">🔄</div><div>任务仍在处理中，页面会自动刷新</div></section>`}
+        <div class="notice">此页面为只读鉴定结果，不提供修改、删除或取消操作。生成时间：${esc(formatTime(task.finished_at || task.updated_at))}</div>`;
+        loadVisibleImages();
+      }
+
+      async function loadImage(element) {
+        const id = element.dataset.photoId;
+        const img = element.querySelector('img');
+        if (!id || img.dataset.loaded) return;
+        img.dataset.loaded = '1';
+        try {
+          let url = imageUrls.get(id);
+          if (!url) {
+            const response = await fetch(`/api/v1/embed/audits/${encodeURIComponent(taskId)}/photos/${encodeURIComponent(id)}`, {
+              headers: { Authorization: `Embed ${token}` }, cache: 'no-store', credentials: 'omit'
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            url = URL.createObjectURL(await response.blob());
+            imageUrls.set(id, url);
+          }
+          img.src = url;
+        } catch (_) {
+          img.alt = '照片加载失败';
+        }
+      }
+
+      function loadVisibleImages() {
+        document.querySelectorAll('.photo[data-photo-id]').forEach(element => {
+          loadImage(element);
+          element.addEventListener('click', async () => {
+            await loadImage(element);
+            const src = element.querySelector('img').src;
+            if (src) {
+              document.getElementById('overlayImage').src = src;
+              document.getElementById('overlay').classList.add('show');
+            }
+          });
+          element.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') element.click();
+          });
+        });
+      }
+
+      async function refresh() {
+        if (!token) {
+          fail('链接中缺少访问 Token，请向服务提供方重新获取嵌入地址。', true);
+          return;
+        }
+        try {
+          const payload = await api(`/api/v1/embed/audits/${encodeURIComponent(taskId)}`);
+          render(payload);
+          if (['pending', 'running'].includes(payload.task.status)) {
+            timer = setTimeout(refresh, 4000);
+          }
+        } catch (error) {
+          const expired = error.status === 401 || error.status === 403;
+          fail(expired ? 'Token 无效、已过期或不属于此任务，请重新申请链接。' : error.message, expired);
+        }
+      }
+
+      document.getElementById('refreshBtn').addEventListener('click', () => {
+        if (timer) clearTimeout(timer);
+        refresh();
+      });
+      document.getElementById('printBtn').addEventListener('click', async () => {
+        if (!lastPayload?.report) return;
+        await Promise.all([...document.querySelectorAll('.photo[data-photo-id]')].map(loadImage));
+        window.print();
+      });
+      document.getElementById('overlay').addEventListener('click', event => event.currentTarget.classList.remove('show'));
+      window.addEventListener('beforeunload', () => imageUrls.forEach(url => URL.revokeObjectURL(url)));
+      refresh();
+    })();
+  </script>
+</body>
+</html>

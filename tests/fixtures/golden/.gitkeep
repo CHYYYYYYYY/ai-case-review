@@ -1,0 +1,3 @@
+# 把已知答案的测试图片放在此目录(清单图 + 修箱照片)
+# 在 golden_answers.json 里记录每单的期望结果
+# 跑回归: pytest tests/test_golden.py

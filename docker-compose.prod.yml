@@ -1,0 +1,120 @@
+# 生产部署用 docker-compose — DGX Spark
+# 整套容器化: api + worker + beat + postgres + redis + minio
+version: "3.9"
+
+x-app-common: &app-common
+  build: .
+  env_file: .env.production
+  environment:
+    APP_ENV: dgx
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+
+services:
+  api:
+    <<: *app-common
+    image: audit-api:latest
+    container_name: audit-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+
+  worker:
+    <<: *app-common
+    image: audit-worker:latest
+    container_name: audit-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command: celery -A app.worker.celery_app worker -c 2 -Q audit --loglevel=info
+
+  beat:
+    <<: *app-common
+    image: audit-beat:latest
+    container_name: audit-beat
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: celery -A app.worker.celery_app beat --loglevel=info
+
+  postgres:
+    image: docker.m.daocloud.io/library/postgres:15
+    container_name: audit-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-audit}
+      POSTGRES_USER: ${POSTGRES_USER:-audit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-audit_prod_pwd}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-audit}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: docker.m.daocloud.io/library/redis:7-alpine
+    container_name: audit-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-audit_redis_pwd}
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-audit_redis_pwd}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: docker.m.daocloud.io/minio/minio:latest
+    container_name: audit-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-audit_prod}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-audit_prod_secret}
+    ports:
+      - "9002:9000"
+      - "9003:9001"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: docker.m.daocloud.io/minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-audit_prod} ${MINIO_SECRET_KEY:-audit_prod_secret};
+      mc mb -p local/${MINIO_BUCKET_PROD:-audit-prod} || true;
+      "
+
+volumes:
+  pg_data:
+  redis_data:
+  minio_data:

@@ -1,0 +1,2536 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>集装箱修箱清单 AI 稽核系统</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  .container { max-width: 1400px; margin: 0 auto; }
+
+  /* 头部 */
+  .header {
+    background: rgba(255,255,255,0.98);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 32px 40px;
+    margin-bottom: 24px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+  }
+  .header-content { display: flex; align-items: center; justify-content: space-between; }
+  .logo-area { display: flex; align-items: center; gap: 16px; }
+  .logo {
+    width: 56px; height: 56px;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+    color: white;
+    font-weight: bold;
+  }
+  .title-area h1 {
+    font-size: 28px;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 4px;
+  }
+  .title-area .subtitle { color: #6b7280; font-size: 14px; }
+  .stats { display: flex; gap: 24px; }
+  .stat-item { text-align: center; }
+  .stat-item .num { font-size: 24px; font-weight: bold; color: #10b981; }
+  .stat-item .label { font-size: 12px; color: #9ca3af; margin-top: 4px; }
+
+  /* 主布局 */
+  .main-layout { display: grid; grid-template-columns: 1fr 400px; gap: 24px; }
+
+  /* 卡片通用样式 */
+  .card {
+    background: rgba(255,255,255,0.98);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 28px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+    transition: all 0.3s ease;
+  }
+  .card:hover { box-shadow: 0 12px 48px rgba(0,0,0,0.12); }
+  .card-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .card-title .icon {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    color: white;
+    font-size: 16px;
+  }
+
+  /* 清单图预览（紧凑模式） */
+  .manifest-preview {
+    margin-top: 12px;
+    margin-bottom: 20px;
+    border: 2px solid #667eea;
+    border-radius: 12px;
+    padding: 16px;
+    background: #eef2ff;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: relative;
+  }
+  .manifest-preview img {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.3s ease;
+    border: 2px solid #667eea;
+  }
+  .manifest-preview img:hover {
+    transform: scale(1.1);
+  }
+  .manifest-info {
+    flex: 1;
+  }
+  .manifest-info .name {
+    font-weight: 600;
+    color: #4338ca;
+    margin-bottom: 6px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .manifest-info .size {
+    font-size: 13px;
+    color: #6366f1;
+  }
+  .manifest-preview .remove-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 28px;
+    height: 28px;
+    background: #ef4444;
+    opacity: 1;
+  }
+  .upload-zone {
+    border: 2px dashed #d1d5db;
+    border-radius: 12px;
+    padding: 52px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: #fafafa;
+    margin-bottom: 20px;
+  }
+  .upload-zone.dragover {
+    border-color: #667eea;
+    background: #eff6ff;
+  }
+  .upload-zone:hover {
+    border-color: #667eea;
+    background: #f9fafb;
+  }
+  .upload-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    color: #9ca3af;
+  }
+  .upload-text { color: #374151; font-size: 16px; margin-bottom: 8px; }
+  .upload-hint { color: #9ca3af; font-size: 13px; }
+  input[type=file] { display: none; }
+
+  /* 照片预览 */
+  .photos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .photo-item {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  .photo-item:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  }
+  .photo-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .photo-item .remove-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    background: rgba(239,68,68,0.95);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .photo-item:hover .remove-btn { opacity: 1; }
+  .photo-item .index {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  /* 按钮 */
+  .btn {
+    padding: 12px 28px;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+  }
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(102,126,234,0.4);
+  }
+  .btn-primary:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+    transform: none;
+  }
+  .btn-secondary {
+    background: #f3f4f6;
+    color: #374151;
+  }
+  .btn-secondary:hover {
+    background: #e5e7eb;
+  }
+
+  /* 进度卡片 */
+  .progress-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 24px;
+    border-radius: 16px;
+    margin-bottom: 20px;
+  }
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .task-id {
+    font-family: monospace;
+    font-size: 13px;
+    opacity: 0.9;
+  }
+  .progress-bar-container {
+    background: rgba(255,255,255,0.2);
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .progress-bar {
+    height: 100%;
+    background: white;
+    transition: width 0.3s ease;
+    border-radius: 4px;
+  }
+  .stage-info {
+    font-size: 14px;
+    opacity: 0.95;
+  }
+
+  /* 状态标签 */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .status-badge.pending { background: #fef3c7; color: #92400e; }
+  .status-badge.running {
+    background: #dbeafe;
+    color: #1e40af;
+    animation: pulse 2s infinite;
+  }
+  .status-badge.succeeded { background: #dbeafe; color: #1e40af; }
+  .status-badge.failed { background: #fee2e2; color: #991b1b; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  /* 历史任务 */
+  .history-filter {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+    flex-wrap: nowrap;
+  }
+  .filter-btn {
+    padding: 6px 10px;
+    border: 1px solid #e5e7eb;
+    background: white;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: #6b7280;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .filter-btn:hover {
+    border-color: #667eea;
+    background: #f9fafb;
+  }
+  .filter-btn.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-color: transparent;
+  }
+
+  .history-list {
+    max-height: 480px;
+    overflow-y: auto;
+  }
+  .history-item {
+    padding: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+  .history-item:hover {
+    border-color: #667eea;
+    background: #f9fafb;
+  }
+  .history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .history-time {
+    font-size: 12px;
+    color: #9ca3af;
+  }
+  /* 分页控件 */
+  .pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e7eb;
+  }
+  .page-btn {
+    padding: 8px 16px;
+    border: 1px solid #e5e7eb;
+    background: white;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: #374151;
+  }
+  .page-btn:hover:not(:disabled) {
+    border-color: #667eea;
+    background: #f9fafb;
+    color: #667eea;
+  }
+  .page-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .page-info {
+    font-size: 13px;
+    color: #6b7280;
+  }
+  .page-info span {
+    font-weight: 600;
+    color: #374151;
+  }
+
+  /* 统计面板 */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .stat-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: #f9fafb;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+  }
+  .stat-card:hover {
+    background: #f3f4f6;
+    transform: translateX(4px);
+  }
+  .stat-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .stat-content {
+    flex: 1;
+  }
+  .stat-value {
+    font-size: 18px;
+    font-weight: bold;
+    color: #111827;
+    margin-bottom: 2px;
+  }
+  .stat-label {
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  /* 报告展示 */
+  .report-summary {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    margin: 20px 0;
+  }
+  .summary-item {
+    text-align: center;
+    padding: 20px;
+    background: #f9fafb;
+    border-radius: 12px;
+  }
+  .summary-item .number {
+    font-size: 32px;
+    font-weight: bold;
+    margin-bottom: 8px;
+  }
+  .summary-item .label {
+    font-size: 13px;
+    color: #6b7280;
+  }
+  .summary-item.verified .number { color: #10b981; }
+  .summary-item.partial .number { color: #f59e0b; }
+  .summary-item.missing .number { color: #ef4444; }
+
+  .report-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-top: 20px;
+  }
+  .report-table th {
+    background: #f9fafb;
+    padding: 14px 12px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    color: #374151;
+    border-bottom: 2px solid #e5e7eb;
+  }
+  .report-table td {
+    padding: 12px;
+    border-bottom: 1px solid #f3f4f6;
+    font-size: 13px;
+  }
+  .report-table tr:hover {
+    background: #f9fafb;
+  }
+
+  /* 逐项鉴定：默认展开的简洁卡片 */
+  .verification-list {
+    display: grid;
+    gap: 14px;
+    margin-top: 20px;
+  }
+  .verification-card {
+    --result-color: #9ca3af;
+    --result-bg: #f3f4f6;
+    position: relative;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-left: 5px solid var(--result-color);
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+  }
+  .verification-card.status-verified { --result-color: #22c55e; --result-bg: #ecfdf3; }
+  .verification-card.status-partial { --result-color: #f59e0b; --result-bg: #fffbeb; }
+  .verification-card.status-missing { --result-color: #ef4444; --result-bg: #fff1f2; }
+  .verification-card.status-unsupported { --result-color: #64748b; --result-bg: #f1f5f9; }
+  .verification-card.status-overclaimed { --result-color: #7c3aed; --result-bg: #f5f3ff; }
+  .verification-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    padding: 20px 22px 14px;
+  }
+  .verification-copy { min-width: 0; }
+  .verification-title {
+    color: #111827;
+    font-size: 17px;
+    font-weight: 750;
+    line-height: 1.45;
+  }
+  .verification-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px 18px;
+    margin-top: 10px;
+    color: #4b5563;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .verification-facts b { color: #111827; font-weight: 600; }
+  .verification-result-wrap {
+    min-width: 120px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 7px;
+  }
+  .verification-result {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-width: 104px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    background: var(--result-color);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+    box-shadow: 0 3px 9px rgba(15, 23, 42, 0.12);
+  }
+  .verification-text {
+    display: grid;
+    gap: 8px;
+    padding: 0 22px 18px;
+    color: #374151;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .verification-text-line {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr);
+    gap: 10px;
+  }
+  .verification-text-label { color: #6b7280; font-weight: 600; }
+  .verification-details {
+    padding: 17px 22px 20px;
+    border-top: 1px solid #edf0f4;
+    background: #fafbfc;
+  }
+  .verification-details .item-meta-group {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .verification-details .item-meta-group + .item-meta-group {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid #e5e7eb;
+  }
+  .verification-empty {
+    color: #9ca3af;
+    font-size: 13px;
+  }
+  @media (max-width: 760px) {
+    .verification-card-head { gap: 12px; padding: 16px 16px 12px; }
+    .verification-title { font-size: 15px; }
+    .verification-result-wrap { min-width: auto; }
+    .verification-result { min-width: auto; padding: 7px 10px; font-size: 12px; }
+    .verification-text { padding: 0 16px 15px; }
+    .verification-text-line { grid-template-columns: 68px minmax(0, 1fr); }
+    .verification-details { padding: 15px 16px 17px; }
+  }
+
+  /* v3.8-GG 报告增强 */
+  .item-expand-btn {
+    background: #f3f4f6;
+    border: none;
+    border-radius: 4px;
+    width: 22px;
+    height: 22px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #6b7280;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .item-expand-btn:hover { background: #e5e7eb; }
+  .item-expand-row td {
+    background: #f8faff;
+    padding: 0 !important;
+  }
+  .item-expand-content {
+    padding: 16px 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .item-expand-section {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .item-expand-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  .item-expand-section-value {
+    font-size: 13px;
+    color: #374151;
+  }
+  .item-expand-photos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .photo-chip {
+    background: #e0e7ff;
+    color: #4338ca;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-family: monospace;
+  }
+  .photo-chip img.photo-thumb {
+    height: 36px;
+    width: auto;
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-right: 3px;
+    object-fit: cover;
+  }
+  .photo-chip noscript { display: none; }
+  .photo-chip .photo-fallback { display: none; }
+
+  .tag-paa {
+    background: #fef3c7;
+    color: #92400e;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 4px;
+  }
+  .tag-suspicious {
+    color: #ef4444;
+    font-size: 14px;
+    margin-left: 3px;
+  }
+  .tag-strong-match {
+    background: #d1fae5;
+    color: #065f46;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .match-source-exact { color: #059669; font-size: 11px; margin-left: 4px; }
+  .match-source-fuzzy { color: #d97706; font-size: 11px; margin-left: 4px; }
+
+  /* v3.8-GG: 照片详情卡片 — 卡片式布局（可点击展开） */
+  .photo-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 90px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+  }
+  .photo-card:hover {
+    border-color: #667eea;
+    box-shadow: 0 4px 16px rgba(102,126,234,0.15);
+    transform: translateY(-2px);
+  }
+  .photo-card .photo-thumb-wrap {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 2px solid #e5e7eb;
+  }
+  .photo-card:hover .photo-thumb-wrap {
+    border-color: #667eea;
+  }
+  .photo-card .photo-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .photo-card .photo-name {
+    font-size: 11px;
+    color: #374151;
+    text-align: center;
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .photo-card .photo-tags {
+    display: flex;
+    gap: 3px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .match-tag-comp {
+    background: #dbeafe;
+    color: #1e40af;
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-size: 9px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .match-tag-side {
+    background: #fce7f3;
+    color: #9d174d;
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-size: 9px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .match-score {
+    color: #059669;
+    font-weight: 600;
+    font-size: 10px;
+  }
+  .match-dir {
+    color: #6b7280;
+    font-size: 10px;
+    text-align: center;
+  }
+
+  /* 旧式紧凑 chip（用于表头关键照片列） */
+  .photo-chip {
+    background: #e0e7ff;
+    color: #4338ca;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-family: monospace;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .photo-chip:hover { background: #c7d2fe; }
+  .photo-chip img.photo-thumb {
+    height: 36px;
+    width: auto;
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-right: 3px;
+    object-fit: cover;
+  }
+  .photo-chip noscript { display: none; }
+  .photo-chip .photo-fallback { display: none; }
+
+  /* 可展开 Item 行样式 */
+  .item-expand-btn {
+    background: #f3f4f6;
+    border: none;
+    border-radius: 4px;
+    width: 22px;
+    height: 22px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #6b7280;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .item-expand-btn:hover { background: #e5e7eb; }
+  .item-expand-row td {
+    background: #f8faff;
+    padding: 0 !important;
+  }
+  .item-expand-content {
+    padding: 16px 20px;
+  }
+
+  /* Item 明细分组 — 网格布局 */
+  .item-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .item-meta-group {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 12px;
+  }
+  .item-meta-group-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .item-meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 0;
+    font-size: 13px;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .item-meta-row:last-child { border-bottom: none; }
+  .item-meta-label { color: #9ca3af; font-size: 12px; }
+  .item-meta-value { color: #111827; font-weight: 500; }
+
+  /* 照片网格（展开区域） */
+  .item-photos-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  /* 照片描述列表 */
+  .photo-desc-list {
+    margin-top: 14px;
+    padding-left: 20px;
+    list-style: disc;
+    font-size: 13px;
+    color: #374151;
+  }
+  .photo-desc-list li {
+    margin-bottom: 6px;
+    line-height: 1.6;
+    color: #4b5563;
+  }
+  .photo-desc-list li b {
+    color: #667eea;
+    font-weight: 600;
+  }
+  .photo-desc-list .desc-score { color: #059669; font-weight: 600; }
+  .photo-desc-list .desc-tag { color: #7c3aed; font-weight: 600; }
+
+  /* 最终建议卡片 */
+  .final-recommendation {
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    border: 1px solid #10b981;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .final-recommendation .rec-icon { font-size: 24px; }
+  .final-recommendation .rec-label { font-size: 15px; font-weight: 700; color: #065f46; }
+  .final-recommendation .rec-value { font-size: 16px; font-weight: 700; color: #047857; margin-left: 8px; }
+  .final-recommendation.partial {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border-color: #f59e0b;
+  }
+  .final-recommendation.partial .rec-label,
+  .final-recommendation.partial .rec-value { color: #92400e; }
+  .final-recommendation.missing {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    border-color: #ef4444;
+  }
+  .final-recommendation.missing .rec-label,
+  .final-recommendation.missing .rec-value { color: #991b1b; }
+
+  .tag-paa {
+    background: #fef3c7;
+    color: #92400e;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 4px;
+  }
+  .tag-suspicious {
+    color: #ef4444;
+    font-size: 14px;
+    margin-left: 3px;
+  }
+  .tag-strong-match {
+    background: #d1fae5;
+    color: #065f46;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .match-source-exact { color: #059669; font-size: 11px; margin-left: 4px; }
+  .match-source-fuzzy { color: #d97706; font-size: 11px; margin-left: 4px; }
+
+  .cargo-info-section {
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .cargo-info-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #92400e;
+    white-space: nowrap;
+  }
+  .cargo-info-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #78350f;
+  }
+  .cargo-info-confidence {
+    font-size: 11px;
+    color: #b45309;
+    margin-top: 2px;
+  }
+  .cargo-info-source {
+    font-size: 11px;
+    color: #92400e;
+    margin-top: 4px;
+  }
+  .direction-score {
+    display: inline-block;
+    background: #dbeafe;
+    color: #1e40af;
+    border-radius: 10px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  /* 模态框 */
+  .modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal.show { display: flex; }
+  .modal-content {
+    max-width: 90%;
+    max-height: 90%;
+    position: relative;
+  }
+  .modal-content img {
+    max-width: 100%;
+    max-height: 85vh;
+    border-radius: 12px;
+    object-fit: contain;
+  }
+  .modal-close {
+    position: absolute;
+    top: -50px;
+    right: 0;
+    background: white;
+    border: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    font-size: 24px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    transition: all 0.3s ease;
+  }
+  .modal-close:hover {
+    background: #f3f4f6;
+    transform: scale(1.1);
+  }
+
+  /* 关键照片缩略图网格 */
+  .key-photos-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .key-photos-count {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 4px;
+  }
+  .key-photos-thumb-row {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+  }
+  .key-photo-thumb {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  .key-photo-thumb:hover {
+    transform: scale(1.15);
+    border-color: #667eea;
+    z-index: 1;
+  }
+  .key-photo-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .key-photo-thumb.verified::after {
+    content: '✓';
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    background: #10b981;
+    color: white;
+    font-size: 10px;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 2px 0 4px 0;
+  }
+  .key-photo-thumb.missing::after {
+    content: '✗';
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    background: #ef4444;
+    color: white;
+    font-size: 10px;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 2px 0 4px 0;
+  }
+  .key-photo-overflow {
+    width: 36px;
+    height: 36px;
+    border-radius: 4px;
+    background: #f3f4f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #6b7280;
+  }
+  @media (max-width: 768px) {
+    .header-content { flex-direction: column; gap: 20px; }
+    .photos-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+    .report-summary { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <!-- 头部 -->
+    <div class="header">
+      <div class="header-content">
+        <div class="logo-area">
+          <div class="logo">🚢</div>
+          <div class="title-area">
+            <h1>集装箱修箱清单 AI 稽核系统</h1>
+            <div class="subtitle">智能识别 · 自动匹配 · 精准核验</div>
+          </div>
+        </div>
+      </div>
+
+    <!-- 主内容区 -->
+    <div class="main-layout">
+      <!-- 左侧：上传与报告 -->
+      <div class="left-section">
+        <!-- 上传卡片 -->
+        <div class="card">
+          <div class="card-title">
+            <span class="icon">📤</span>
+            <span>上传文件</span>
+          </div>
+
+          <label style="font-size: 14px; color: #374151; margin-bottom: 8px; display: block;">维修清单图（1张）</label>
+          <div class="upload-zone" id="manifestZone" onclick="document.getElementById('manifest').click()">
+            <div class="upload-icon">📋</div>
+            <div class="upload-text">点击上传或拖拽清单图到此处</div>
+            <div class="upload-hint">支持 JPG、PNG、WebP，最大 10MB</div>
+          </div>
+          <input type="file" id="manifest" accept="image/*">
+          <div id="manifestPreview"></div>
+
+          <label style="font-size: 14px; color: #374151; margin: 24px 0 8px; display: block;">修箱照片（1-30张）</label>
+          <div class="upload-zone" id="photosZone" onclick="document.getElementById('photos').click()">
+            <div class="upload-icon">📷</div>
+            <div class="upload-text">点击上传或拖拽修箱照片到此处</div>
+            <div class="upload-hint">已选择 <span id="photoCount" style="color: #667eea; font-weight: 600;">0</span> 张照片</div>
+          </div>
+          <input type="file" id="photos" accept="image/*" multiple>
+          <div id="photosPreview" class="photos-grid"></div>
+
+          <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
+            <button class="btn btn-primary" id="submitBtn" onclick="submitTask()" style="width: 100%;">
+              <span>🚀</span>
+              <span>提交稽核任务</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 进度卡片 -->
+        <div id="progressSection" style="display: none;">
+          <div class="progress-card">
+            <div class="progress-header">
+              <div>
+                <div style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">任务进行中</div>
+                <div class="task-id">Task ID: <span id="taskId"></span></div>
+              </div>
+              <div id="taskStatus"></div>
+            </div>
+            <div class="progress-bar-container">
+              <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+            </div>
+            <div class="stage-info" id="stageInfo">正在准备...</div>
+            <div style="margin-top: 16px; display: flex; gap: 12px;">
+              <button class="btn btn-secondary" onclick="pollOnce()" style="flex: 1;">
+                🔄 刷新状态
+              </button>
+              <button class="btn" id="autoBtn" onclick="toggleAuto()" style="flex: 1; background: rgba(255,255,255,0.3); color: white;">
+                ⏱️ 自动轮询: 开
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 报告卡片 -->
+        <div class="card" id="reportCard" style="display:none">
+          <div class="card-title">
+            <span class="icon">📊</span>
+            <span>稽核报告</span>
+            <button class="btn btn-secondary" onclick="exportReport()" style="margin-left: auto; padding: 8px 16px; font-size: 13px;">
+              📥 导出报告
+            </button>
+          </div>
+          <div id="reportContent"></div>
+        </div>
+      </div>
+
+      <!-- 右侧：历史任务 -->
+      <div class="right-section">
+        <div class="card" style="padding: 16px;">
+          <div class="card-title" style="margin-bottom: 12px; font-size: 15px;">
+            <span class="icon" style="width: 24px; height: 24px; font-size: 12px;">📝</span>
+            <span>历史任务</span>
+          </div>
+
+          <!-- 筛选器 -->
+          <div class="history-filter">
+            <button class="filter-btn active" data-status="all" onclick="filterHistory('all')">
+              全部 (<span id="countAll">0</span>)
+            </button>
+            <button class="filter-btn" data-status="succeeded" onclick="filterHistory('succeeded')">
+              ✅ 成功 (<span id="countSucceeded">0</span>)
+            </button>
+            <button class="filter-btn" data-status="failed" onclick="filterHistory('failed')">
+              ❌ 失败 (<span id="countFailed">0</span>)
+            </button>
+            <button class="filter-btn" data-status="running" onclick="filterHistory('running')">
+              ⏳ 进行中 (<span id="countRunning">0</span>)
+            </button>
+          </div>
+
+          <div class="history-list" id="historyList">
+            <div style="text-align: center; padding: 40px 20px; color: #9ca3af;">
+              <div style="font-size: 48px; margin-bottom: 12px;">📋</div>
+              <div>暂无历史任务</div>
+            </div>
+          </div>
+
+          <!-- 分页控件 -->
+          <div class="pagination" id="pagination" style="display: none;">
+            <button class="page-btn" onclick="changePage(-1)" id="prevBtn">
+              ← 上一页
+            </button>
+            <span class="page-info">
+              第 <span id="currentPage">1</span> / <span id="totalPages">1</span> 页
+            </span>
+            <button class="page-btn" onclick="changePage(1)" id="nextBtn">
+              下一页 →
+            </button>
+          </div>
+        </div>
+
+        <!-- 快捷操作 -->
+        <div class="card" style="margin-top: 24px; padding: 16px;">
+          <div class="card-title" style="margin-bottom: 12px; font-size: 15px;">
+            <span class="icon" style="width: 24px; height: 24px; font-size: 12px;">⚡</span>
+            <span>快捷操作</span>
+          </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <button class="btn btn-secondary" onclick="exportHistory()" style="width: 100%; justify-content: center; padding: 8px 16px; font-size: 13px;">
+                📥 导出历史记录
+              </button>
+            </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 图片预览模态框 -->
+  <div class="modal" id="imageModal" onclick="closeModal()" style="z-index: 3000;">
+    <div class="modal-content" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 95vw; max-height: 95vh;">
+      <button class="modal-close" onclick="closeModal()">×</button>
+      <img id="modalImage" src="" alt="预览" style="max-width: 100%; max-height: 90vh; border-radius: 12px; object-fit: contain;">
+    </div>
+  </div>
+
+  <!-- 报告详情模态框 -->
+  <div class="modal" id="reportModal" onclick="closeReportModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 1200px; max-height: 90vh; overflow-y: auto; background: white; border-radius: 16px; padding: 32px; position: relative;">
+      <button class="modal-close" onclick="closeReportModal()" style="position: absolute; top: 16px; right: 16px; background: #f3f4f6; width: 36px; height: 36px; border-radius: 50%; border: none; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #6b7280; z-index: 10;">×</button>
+      <div id="modalReportContent"></div>
+    </div>
+  </div>
+
+<script>
+let photos = [];          // 原始文件列表（File 对象）
+let photoIdMap = [];      // 提交后填充：[{blobUrl, photoId, seq, filename}]
+let taskId = null;
+let autoTimer = null;
+let currentReport = null;
+// API 拉取的历史列表（内存），不再存 localStorage
+let historyLoaded = [];
+
+// 初始化
+window.onload = () => {
+  updateStats();
+  fetchHistory();  // 从后端 API 拉历史
+  setupDragDrop();
+};
+
+// 从后端 API 拉取历史任务列表
+async function fetchHistory() {
+  try {
+    historyLoaded = await apiFetch('/api/v1/audits');
+    renderHistory();
+  } catch (e) {
+    console.warn('拉取历史失败:', e.message);
+    historyLoaded = [];
+    renderHistory();
+  }
+}
+
+// 统一封装 fetch + JSON 解析, 失败时给出可读错误
+async function apiFetch(url, options = {}) {
+  const r = await fetch(url, options);
+  const ct = r.headers.get('content-type') || '';
+  const text = await r.text();
+  if (!ct.includes('application/json')) {
+    // 服务器返回 HTML 错误页/网关页等
+    const preview = text.replace(/\s+/g, ' ').slice(0, 200);
+    throw new Error(
+      `服务端返回了非 JSON (HTTP ${r.status} ${r.statusText}): ${preview}`
+    );
+  }
+  let j;
+  try {
+    j = text ? JSON.parse(text) : {};
+  } catch (e) {
+    throw new Error(`JSON 解析失败 (HTTP ${r.status}): ${text.slice(0, 200)}`);
+  }
+  if (!r.ok) {
+    throw new Error(JSON.stringify(j));
+  }
+  return j;
+}
+
+// 拖拽上传
+function setupDragDrop() {
+  const zones = [
+    { zone: 'manifestZone', input: 'manifest', single: true },
+    { zone: 'photosZone', input: 'photos', single: false }
+  ];
+
+  zones.forEach(({zone, input, single}) => {
+    const el = document.getElementById(zone);
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
+      el.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); });
+    });
+    ['dragenter', 'dragover'].forEach(evt => el.addEventListener(evt, () => el.classList.add('dragover')));
+    ['dragleave', 'drop'].forEach(evt => el.addEventListener(evt, () => el.classList.remove('dragover')));
+    el.addEventListener('drop', e => {
+      const files = e.dataTransfer.files;
+      if (single && files.length > 0) {
+        const dt = new DataTransfer();
+        dt.items.add(files[0]);
+        document.getElementById(input).files = dt.files;
+        document.getElementById(input).dispatchEvent(new Event('change'));
+      } else if (!single) {
+        for (const f of files) {
+          if (f.size > 10 * 1024 * 1024) {
+            alert(`照片 "${f.name}" 超过 10MB，已跳过`);
+            continue;
+          }
+          photos.push(f);
+        }
+        renderPhotos();
+      }
+    });
+  });
+}
+
+// 清单图预览
+function manifestChangeHandler(e) {
+  const f = e.target.files[0];
+  const preview = document.getElementById('manifestPreview');
+  const zone = document.getElementById('manifestZone');
+
+  if (f) {
+    // 文件大小校验：最大 10MB
+    if (f.size > 10 * 1024 * 1024) {
+      alert('清单图文件过大，请选择 10MB 以内的图片');
+      clearManifest();
+      return;
+    }
+    const url = URL.createObjectURL(f);
+    const sizeMB = (f.size / 1024 / 1024).toFixed(2);
+
+    // 隐藏上传区，显示紧凑预览
+    zone.style.display = 'none';
+    preview.innerHTML = `
+      <div class="manifest-preview">
+        <img src="${url}" onclick="openModal('${url}')" title="点击查看大图">
+        <div class="manifest-info">
+          <div class="name">
+            <span>✅</span>
+            <span>${f.name}</span>
+          </div>
+          <div class="size">📊 文件大小: ${sizeMB} MB</div>
+        </div>
+        <button class="remove-btn" onclick="clearManifest()" title="删除重新上传">×</button>
+      </div>`;
+  } else {
+    clearManifest();
+  }
+}
+document.getElementById('manifest').addEventListener('change', manifestChangeHandler);
+
+function clearManifest() {
+  const preview = document.getElementById('manifestPreview');
+  const zone = document.getElementById('manifestZone');
+  const oldInput = document.getElementById('manifest');
+
+  zone.style.display = 'block';
+  // 彻底清空 file input（重建节点）
+  const newInput = oldInput.cloneNode(true);
+  oldInput.parentNode.replaceChild(newInput, oldInput);
+  preview.innerHTML = '';
+
+  // 重新绑定 change 监听器
+  newInput.addEventListener('change', manifestChangeHandler);
+}
+
+// 修箱照片处理
+document.getElementById('photos').addEventListener('change', e => {
+  for (const f of e.target.files) {
+    // 文件大小校验：最大 10MB
+    if (f.size > 10 * 1024 * 1024) {
+      alert(`照片 "${f.name}" 超过 10MB，已跳过`);
+      continue;
+    }
+    photos.push(f);
+  }
+  e.target.value = '';
+  renderPhotos();
+});
+
+function renderPhotos() {
+  const c = document.getElementById('photosPreview');
+  document.getElementById('photoCount').textContent = photos.length;
+  c.innerHTML = photos.map((f, i) => {
+    const url = URL.createObjectURL(f);
+    const mapped = photoIdMap[i];
+    // 提交后显示序号（按上传顺序）和 photo_id 前8位
+    const label = mapped
+      ? `#${mapped.seq} · ${mapped.photoId.slice(0, 8)}`
+      : `#${i + 1}`;
+    return `
+      <div class="photo-item" onclick="openModal('${url}')">
+        <img src="${url}">
+        <button class="remove-btn" onclick="event.stopPropagation(); rmPhoto(${i})">×</button>
+        <div class="index" title="${mapped ? mapped.photoId : ''}">${label}</div>
+      </div>`;
+  }).join('');
+}
+
+function rmPhoto(i) { photos.splice(i, 1); photoIdMap.splice(i, 1); renderPhotos(); }
+
+// 图片预览
+function openModal(url) {
+  document.getElementById('modalImage').src = url;
+  document.getElementById('imageModal').classList.add('show');
+}
+function closeModal() {
+  document.getElementById('imageModal').classList.remove('show');
+}
+
+// 提交任务
+async function submitTask() {
+  const manifest = document.getElementById('manifest').files[0];
+  if (!manifest) { alert('请选择清单图'); return; }
+  if (photos.length === 0) { alert('请至少选择1张修箱照片'); return; }
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span>⏳</span><span>提交中...</span>';
+
+  // 清掉可能残留的旧自动轮询
+  clearInterval(autoTimer);
+  autoTimer = null;
+
+  const fd = new FormData();
+  fd.append('manifest_image', manifest);
+  const uploadBatchId = Date.now().toString(36);
+  photos.forEach((photo, idx) => {
+    fd.append('photos', photo);
+    // 浏览器试用页没有客户业务 ID，因此自动生成；正式 API 客户应传自己的 photosIds。
+    const randomPart = window.crypto?.randomUUID
+      ? window.crypto.randomUUID()
+      : Math.random().toString(36).slice(2);
+    fd.append('photosIds', `web_${uploadBatchId}_${idx + 1}_${randomPart}`);
+  });
+
+  try {
+    const j = await apiFetch('/api/v1/audits', { method: 'POST', body: fd });
+    taskId = j.task_id;
+    // v3.8-GG: 保存照片 ID 对照（blob URL → photo_id）
+    const mappings = j.photo_mappings || (j.photo_id_list || []).map((pid, idx) => ({
+      photo_id: pid,
+      seq: idx + 1,
+      filename: photos[idx]?.name,
+      photosId: null,
+    }));
+    photoIdMap = mappings.map((mapping, idx) => ({
+      photoId: mapping.photo_id,
+      photosId: mapping.photosId,
+      seq: mapping.seq || idx + 1,
+      blobUrl: URL.createObjectURL(photos[idx]),
+      filename: mapping.filename || photos[idx].name,
+    }));
+    // 重建进度卡片（清除旧失败状态残留）
+    document.getElementById('progressSection').innerHTML = `
+      <div class="progress-card">
+        <div class="progress-header">
+          <div>
+            <div style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">任务进行中</div>
+            <div class="task-id">Task ID: <span id="taskId">${taskId}</span></div>
+          </div>
+          <div id="taskStatus"></div>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+        </div>
+        <div class="stage-info" id="stageInfo">正在准备...</div>
+        <div style="margin-top: 16px; display: flex; gap: 12px;">
+          <button class="btn btn-secondary" onclick="pollOnce()" style="flex: 1;">
+            🔄 刷新状态
+          </button>
+          <button class="btn" id="autoBtn" onclick="toggleAuto()" style="flex: 1; background: rgba(255,255,255,0.2); color: white;">
+            ⏱️ 自动轮询: 关
+          </button>
+        </div>
+      </div>`;
+    document.getElementById('progressSection').style.display = 'block';
+    document.getElementById('reportCard').style.display = 'none';
+    toggleAuto(true);
+    pollOnce();
+  } catch (e) {
+    alert('提交失败: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<span>🚀</span><span>提交稽核任务</span>';
+  }
+}
+
+function doClearForm() {
+  photos = [];
+  renderPhotos();
+  clearManifest();
+}
+
+
+// 轮询状态
+async function pollOnce() {
+  if (!taskId) return;
+  try {
+    const j = await apiFetch(`/api/v1/audits/${taskId}`);
+
+    const stageMap = {
+      'p1_a': { name: 'P1-A 铭牌识别', progress: 10 },
+      'p1_b': { name: 'P1-B 清单OCR', progress: 20 },
+      'p2_a': { name: 'P2-A 照片索引', progress: 35 },
+      'p2_c': { name: 'P2-C 货物识别', progress: 45 },
+      'p3': { name: 'P3 清单预处理', progress: 55 },
+      'p4_a1': { name: 'P4-A1 部件匹配', progress: 70 },
+      'p5_b': { name: 'P5-B 损伤核验', progress: 85 },
+      'p6': { name: 'P6 报告生成', progress: 95 }
+    };
+
+    const stage = stageMap[j.current_stage] || { name: '准备中', progress: 5 };
+    const status = j.status;
+
+    document.getElementById('taskStatus').innerHTML = `<span class="status-badge ${status}">${status}</span>`;
+    document.getElementById('stageInfo').textContent = `${stage.name} ${j.progress?.detail || ''}`;
+    document.getElementById('progressBar').style.width = (status === 'succeeded' ? 100 : stage.progress) + '%';
+
+    // 任何状态下都同步历史记录里的状态(避免停留在 pending)
+    if (status === 'running' || status === 'pending') {
+      updateHistoryStatus(taskId, status);
+    }
+
+    if (status === 'succeeded') {
+      toggleAuto(false);
+      updateHistoryStatus(taskId, 'succeeded');
+      await getReport();
+      // 成功后才清空表单
+      photos = [];
+      photoIdMap = [];
+      renderPhotos();
+      clearManifest();
+    } else if (status === 'failed') {
+      // 关闭自动轮询（不用 toggleAuto，因为 autoBtn 已被替换）
+      clearInterval(autoTimer);
+      autoTimer = null;
+      updateHistoryStatus(taskId, 'failed');
+      const errMsg = j.error_msg || '未知错误';
+      const errCode = j.error?.code || '';
+      // 把进度区域变成失败提示（不再弹 alert）
+      document.getElementById('progressSection').innerHTML = `
+        <div class="progress-card" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+          <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div>
+              <div style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">❌ 任务失败</div>
+              <div class="task-id" style="word-break: break-all;">${errCode ? errCode + ': ' : ''}${errMsg}</div>
+            </div>
+            <button class="btn" onclick="resubmitTask()" style="background: rgba(255,255,255,0.2); color: white; padding: 6px 14px; font-size: 13px;">
+              🔄 重新提交
+            </button>
+          </div>
+        </div>`;
+      document.getElementById('progressSection').style.display = 'block';
+      document.getElementById('progressSection').scrollIntoView({ behavior: 'smooth' });
+    }
+  } catch (e) {
+    console.error('轮询失败:', e);
+  }
+}
+
+function toggleAuto(force) {
+  const btn = document.getElementById('autoBtn');
+  if (force === false || autoTimer) {
+    clearInterval(autoTimer);
+    autoTimer = null;
+    btn.innerHTML = '⏱️ 自动轮询: 关';
+    btn.style.background = 'rgba(255,255,255,0.2)';
+  } else {
+    autoTimer = setInterval(pollOnce, 5000);
+    btn.innerHTML = '⏱️ 自动轮询: 开';
+    btn.style.background = 'rgba(255,255,255,0.3)';
+  }
+}
+
+// 重新提交：直接用已有文件重新提交任务
+async function resubmitTask() {
+  // 复用文件输入框和 photos 数组，不需要重新选择文件
+  await submitTask();
+}
+
+// 重新提交：重建进度卡片，保留已选文件
+function resetForm() {
+  taskId = null;
+  // 先重建进度卡片（因为 toggleAuto 要操作 autoBtn）
+  document.getElementById('progressSection').innerHTML = `
+    <div class="progress-card">
+      <div class="progress-header">
+        <div>
+          <div style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">任务进行中</div>
+          <div class="task-id">Task ID: <span id="taskId"></span></div>
+        </div>
+        <div id="taskStatus"></div>
+      </div>
+      <div class="progress-bar-container">
+        <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+      </div>
+      <div class="stage-info" id="stageInfo">正在准备...</div>
+      <div style="margin-top: 16px; display: flex; gap: 12px;">
+        <button class="btn btn-secondary" onclick="pollOnce()" style="flex: 1;">
+          🔄 刷新状态
+        </button>
+        <button class="btn" id="autoBtn" onclick="toggleAuto()" style="flex: 1; background: rgba(255,255,255,0.2); color: white;">
+          ⏱️ 自动轮询: 关
+        </button>
+      </div>
+    </div>`;
+  toggleAuto(false);  // 关闭自动轮询（在重建之后调用）
+  document.getElementById('progressSection').style.display = 'none';
+  document.getElementById('reportCard').style.display = 'none';
+}
+
+// 获取报告
+async function getReport() {
+  if (!taskId) return;
+  try {
+    // 并行获取报告和任务详情（任务详情包含 photos 字段）
+    const [j, taskInfo] = await Promise.all([
+      apiFetch(`/api/v1/audits/${taskId}/report`),
+      apiFetch(`/api/v1/audits/${taskId}`),
+    ]);
+    currentReport = j;
+    const nameMap = (j && j.photo_name_map) || {};
+    const photoUrlMap = (j && j.photo_url_map) || {};
+    // v3.8-GG: photo_id → seq 映射（seq 从 1 开始）
+    // 优先从报告的 photos 字段获取，否则从任务详情的 photos 字段获取
+    const seqMap = {};
+    if (j.photos) {
+      j.photos.forEach(p => { seqMap[p.photo_id] = p.seq; });
+    } else if (taskInfo.photos) {
+      // 旧报告没有 photos，从任务详情获取
+      taskInfo.photos.forEach(p => { seqMap[p.photo_id] = p.seq; });
+      // 同时更新 nameMap（API 返回的字段是 filename）
+      taskInfo.photos.forEach(p => {
+        if (!nameMap[p.photo_id] && p.filename) {
+          nameMap[p.photo_id] = p.filename;
+        }
+      });
+    }
+
+    const card = document.getElementById('reportCard');
+    card.style.display = '';
+    card.scrollIntoView({ behavior: 'smooth' });
+
+    const summary = j.verification_summary;
+
+    function photoChip(pid) {
+      const name = nameMap[pid] || pid;
+      const url = photoUrlMap[pid];
+      if (taskId) {
+        const apiUrl = `/api/v1/audits/${taskId}/photos/${pid}/image`;
+        return `<span class="photo-chip" title="${name}"><img src="${apiUrl}" class="photo-thumb" alt="${name}" onclick="event.stopPropagation();openModal('${apiUrl}')" onerror="this.style.display='none';this.nextSibling.style.display=''" /><noscript>${name}</noscript></span>`;
+      }
+      if (url && !url.startsWith('file://')) {
+        return `<span class="photo-chip" title="${name}"><img src="${url}" class="photo-thumb" alt="${name}" onclick="event.stopPropagation();openModal('${url}')" onerror="this.style.display='none';this.nextSibling.style.display=''" /><noscript>${name}</noscript></span>`;
+      }
+      return `<span class="photo-chip" title="${pid}">${name}</span>`;
+    }
+
+    // 关键照片缩略图单元格
+    function keyPhotosCell(v, taskId, nameMap, seqMap, photoUrlMap) {
+      const total = v.core_photos ? v.core_photos.length : 0;
+      if (total === 0) {
+        return '<span style="color:#9ca3af;font-size:12px">—</span>';
+      }
+
+      // 计算已核验数（verified 的照片数量）
+      let verifiedCount = 0;
+      if (v.core_photos_detail && v.core_photos_detail.length > 0) {
+        // 有详细信息时，根据方向分判断
+        v.core_photos_detail.forEach(m => {
+          if (m.direction_score >= 0.6) verifiedCount++;
+        });
+      }
+
+      const label = `${total} 张照片 (${verifiedCount})`;
+
+      // 只显示前4张照片
+      const thumbs = v.core_photos.slice(0, 4).map((pid, idx) => {
+        // 尝试从 seqMap 获取 seq，如果找不到则使用 idx+1 作为备选
+        let seq = seqMap ? seqMap[pid] : null;
+        if (!seq && seq !== 0) seq = idx + 1;
+        const name = nameMap[pid] || pid;
+        const apiUrl = `/api/v1/audits/${taskId}/photos/${pid}/image`;
+        // 判断是否已核验（有方向分且>=0.6）
+        let statusClass = '';
+        if (v.core_photos_detail && v.core_photos_detail[idx]) {
+          if (v.core_photos_detail[idx].direction_score >= 0.6) {
+            statusClass = 'verified';
+          }
+        }
+        return `<div class="key-photo-thumb ${statusClass}" onclick="event.stopPropagation();openModal('${apiUrl}')" title="#${seq} ${name}">
+          <img src="${apiUrl}" alt="${name}" onerror="this.style.opacity='0.3'" />
+        </div>`;
+      }).join('');
+
+      const overflow = total > 4 ? `<div class="key-photo-overflow">+${total - 4}</div>` : '';
+
+      return `<div class="key-photos-cell">
+        <div class="key-photos-count">${label}</div>
+        <div class="key-photos-thumb-row">
+          ${thumbs}${overflow}
+        </div>
+      </div>`;
+    }
+
+    // 渲染单张照片卡片（可点击查看大图）- 简化版（描述文字放在下方列表）
+    function renderPhotoCard(m, taskId, nameMap, seqMap) {
+      const name = nameMap[m.photo_id] || m.photo_id || '?';
+      // 尝试从 seqMap 获取 seq，如果找不到则显示 ?
+      let seq = seqMap ? (seqMap[m.photo_id] || '?') : '?';
+      const apiUrl = `/api/v1/audits/${taskId}/photos/${m.photo_id}/image`;
+      return `
+      <div class="photo-card" onclick="openModal('${apiUrl}')" title="#${seq} ${name}">
+        <div class="photo-thumb-wrap">
+          <img src="${apiUrl}" class="photo-thumb" alt="${name}" onerror="this.parentElement.style.background='#f3f4f6';this.style.display='none'" />
+        </div>
+        <div class="photo-name">#${seq} ${name}</div>
+      </div>`;
+    }
+
+    // 生成单张照片的描述文字（供下方列表使用）
+    function renderPhotoDescItem(m, taskId, nameMap, seqMap) {
+      const seq = seqMap ? (seqMap[m.photo_id] || '?') : '?';
+      const score = m.direction_score !== null && m.direction_score !== undefined
+        ? ` <span class="desc-score">(${Math.round(m.direction_score * 100)}%)</span>`
+        : ` <span class="desc-score">(N/A)</span>`;
+      // 部件匹配标签
+      const compMatch = m.component_match ? '<span class="desc-tag">P4-A1部件匹配</span>' : '';
+      // 方向匹配标签
+      const sideMatch = m.side_match ? '<span class="desc-tag">方向匹配</span>' : '';
+      // 损伤描述（从 labels 提取或显示有无损伤）
+      let damageInfo = '';
+      if (m.labels && m.labels.length > 0) {
+        const damageLabels = m.labels.filter(l => l.includes('损伤') || l.includes('划痕') || l.includes('凹痕') || l.includes('变形'));
+        if (damageLabels.length > 0) {
+          damageInfo = ' + <span class="desc-tag">' + damageLabels.join(', ') + '</span>';
+        }
+      }
+      if (!damageInfo) {
+        damageInfo = m.has_damage ? ' + <span class="desc-tag">P5-B有损伤</span>' : '';
+      }
+      const parts = [compMatch, sideMatch].filter(Boolean);
+      const matchInfo = parts.length > 0 ? ' — ' + parts.join(' + ') : '';
+      return `photo_${seq}${score}${matchInfo}${damageInfo}`;
+    }
+
+    // cargo info section
+    let cargoHtml = '';
+    if (j.cargo_info) {
+      cargoHtml = `
+      <div class="cargo-info-section">
+        <div class="cargo-info-label">📦 货物</div>
+        <div>
+          <div class="cargo-info-name">${j.cargo_info.cargo_name || '未知'}</div>
+          ${j.cargo_info.confidence ? `<div class="cargo-info-confidence">置信度 ${(j.cargo_info.confidence * 100).toFixed(0)}%</div>` : ''}
+          ${j.cargo_info.cargo_desc ? `<div style="font-size:12px;color:#92400e;margin-top:2px">${j.cargo_info.cargo_desc}</div>` : ''}
+          ${j.cargo_info.source_photos && j.cargo_info.source_photos.length ? `<div class="cargo-info-source">来源照片: ${j.cargo_info.source_photos.map(pid => nameMap[pid] || pid).join(', ')}</div>` : ''}
+        </div>
+      </div>`;
+    }
+
+    const rows = j.item_verifications.map(v => {
+      const statusKey = v.verification_status || 'missing';
+      const statusMeta = {
+        verified: { icon: '✓', text: '已通过' },
+        partial: { icon: '!', text: '部分通过' },
+        missing: { icon: '×', text: '未通过' },
+        unsupported: { icon: '—', text: '不支持' },
+        overclaimed: { icon: '!', text: '疑似多报' },
+      }[statusKey] || { icon: '?', text: statusKey };
+
+      // Badges
+      const paaTag = v.is_paa ? '<span class="tag-paa">PAA</span>' : '';
+      const suspTag = (v.component_suspicious || v.damage_suspicious || v.location_suspicious)
+        ? '<span class="tag-suspicious" title="可疑字段">⚠</span>' : '';
+      const strongTag = v.strong_match
+        ? `<span class="tag-strong-match">强匹配</span><span class="${v.match_source === 'exact' ? 'match-source-exact' : 'match-source-fuzzy'}">(${v.match_source === 'exact' ? '精确' : '模糊'})</span>`
+        : '';
+
+      // P3-C 强匹配照片明细。新报告使用后端保存的 confidence/labels；
+      // 旧报告没有 matched_photos_detail 时，也根据现有字段给出可读的命中依据。
+      const matchedDetails = (v.matched_photos || []).map(pid => {
+        const detail = (v.matched_photos_detail || []).find(m => m.photo_id === pid) || {};
+        const seq = seqMap ? (seqMap[pid] || '?') : '?';
+        const confidence = typeof detail.confidence === 'number'
+          ? ` <span class="desc-score">(${Math.round(detail.confidence * 100)}%)</span>`
+          : ` <span class="desc-score">(已核实)</span>`;
+        const sourceCn = (detail.match_source || v.match_source) === 'exact' ? '精确' : '模糊';
+        const recognized = detail.recognized_location || v.location_code || '?';
+        const target = detail.target_location || v.location_code || '?';
+        const labels = detail.labels && detail.labels.length
+          ? detail.labels
+          : [`P3-C Location ${sourceCn}匹配`, `识别 ${recognized} → 清单 ${target}`];
+        return `<li>photo_${seq}${confidence} — ${labels.map(label => `<span class="desc-tag">${label}</span>`).join(' + ')}</li>`;
+      }).join('');
+
+      const matchedSection = v.matched_photos && v.matched_photos.length ? `
+        <div class="item-meta-group" style="grid-column: 1 / -1;">
+          <div class="item-meta-group-title">✋ 强匹配照片</div>
+          <div class="item-photos-grid">
+            ${v.matched_photos.map(pid => {
+              const n = nameMap[pid] || pid;
+              const u = `/api/v1/audits/${taskId}/photos/${pid}/image`;
+              return `<div class="photo-card" onclick="openModal('${u}')" title="${n}">
+                <div class="photo-thumb-wrap"><img src="${u}" class="photo-thumb" alt="${n}" onerror="this.parentElement.style.background='#f3f4f6';this.style.display='none'" /></div>
+                <div class="photo-name">${n}</div>
+              </div>`;
+            }).join('')}
+          </div>
+          <ul class="photo-desc-list">
+            ${matchedDetails}
+          </ul>
+        </div>` : '';
+
+      // 全部候选照片（卡片网格 + 下方描述列表，展示完整详细信息）
+      let photosSection = '';
+      if (v.core_photos_detail && v.core_photos_detail.length) {
+        const descItems = v.core_photos_detail.map(m => `<li>${renderPhotoDescItem(m, taskId, nameMap, seqMap)}</li>`).join('');
+        photosSection = `
+        <div class="item-meta-group" style="grid-column: 1 / -1;">
+          <div class="item-meta-group-title">📷 候选照片 (${v.core_photos.length}张)</div>
+          <div class="item-photos-grid">
+            ${v.core_photos_detail.map(m => renderPhotoCard(m, taskId, nameMap, seqMap)).join('')}
+          </div>
+          <ul class="photo-desc-list">
+            ${descItems}
+          </ul>
+        </div>`;
+      } else if (v.core_photos && v.core_photos.length) {
+        photosSection = `
+        <div class="item-meta-group" style="grid-column: 1 / -1;">
+          <div class="item-meta-group-title">📷 候选照片 (${v.core_photos.length}张)</div>
+          <div class="item-photos-grid">
+            ${v.core_photos.map(pid => {
+              const n = nameMap[pid] || pid;
+              const u = `/api/v1/audits/${taskId}/photos/${pid}/image`;
+              return `<div class="photo-card" onclick="openModal('${u}')" title="${n}">
+                <div class="photo-thumb-wrap"><img src="${u}" class="photo-thumb" alt="${n}" onerror="this.parentElement.style.background='#f3f4f6';this.style.display='none'" /></div>
+                <div class="photo-name">${n}</div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+      }
+
+      const matchText = v.strong_match
+        ? `强匹配·${v.match_source === 'exact' ? '精确' : '模糊'}`
+        : (v.match_source && v.match_source !== 'none' ? v.match_source : '—');
+
+      return `
+      <article class="verification-card status-${statusKey}">
+        <div class="verification-card-head">
+          <div class="verification-copy">
+            <div class="verification-title">Item ${v.item_no} · ${v.component || '未识别'} ${paaTag}${suspTag} · ${v.damage_code || '—'}</div>
+            <div class="verification-facts">
+              <span><b>部件：</b>${v.component_name || v.component || '—'}</span>
+              <span><b>损伤：</b>${[v.damage_code, v.damage_name].filter(Boolean).join(' · ') || '—'}</span>
+              <span><b>位置：</b>${v.location_code || '—'}</span>
+              <span><b>匹配：</b>${matchText}</span>
+            </div>
+          </div>
+          <div class="verification-result-wrap">
+            <div class="verification-result">${statusMeta.icon} ${statusMeta.text}</div>
+            ${strongTag}
+          </div>
+        </div>
+        <div class="verification-text">
+          <div class="verification-text-line"><span class="verification-text-label">维修说明</span><span>${v.description || '—'}</span></div>
+          <div class="verification-text-line"><span class="verification-text-label">鉴定依据</span><span>${v.auditor_notes || (v.strong_match ? '照片标记与清单位置匹配' : '暂无补充说明')}</span></div>
+        </div>
+        <div class="verification-details">
+          ${matchedSection}
+          ${photosSection}
+          ${!matchedSection && !photosSection ? '<div class="verification-empty">本项未匹配到证据照片</div>' : ''}
+        </div>
+      </article>`;
+    }).join('');
+
+    // 最终建议颜色映射
+    const recClass = j.final_recommendation === 'VERIFIED' ? '' : j.final_recommendation === 'PARTIAL' ? 'partial' : 'missing';
+    const recIcon = j.final_recommendation === 'VERIFIED' ? '✅' : j.final_recommendation === 'PARTIAL' ? '⚠️' : '❌';
+    const recText = j.final_recommendation === 'VERIFIED' ? 'Approve' : j.final_recommendation === 'PARTIAL' ? 'Review Required' : j.final_recommendation === 'MISSING' ? 'Reject' : j.final_recommendation || '-';
+
+    document.getElementById('reportContent').innerHTML = `
+      <div style="background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%); padding: 24px; border-radius: 12px; margin-bottom: 20px;">
+        <div style="font-size: 18px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
+          <span>🚢</span>
+          <span>集装箱号: ${j.container_number || '未识别'}</span>
+          <span style="margin-left: auto;" class="status-badge ${j.final_recommendation === 'VERIFIED' ? 'succeeded' : j.final_recommendation === 'MISSING' ? 'failed' : 'running'}">${j.final_recommendation}</span>
+        </div>
+        <div style="font-size: 14px; color: #6b7280; margin-bottom: 8px;">
+          共 <span style="font-weight: bold; color: #667eea;">${j.total_list_items || j.item_verifications.length}</span> 项
+        </div>
+      </div>
+
+      ${cargoHtml}
+
+      <div class="report-summary">
+        <div class="summary-item verified">
+          <div class="number">${summary.verified}</div>
+          <div class="label">✅ 已核实</div>
+        </div>
+        <div class="summary-item partial">
+          <div class="number">${summary.partial}</div>
+          <div class="label">⚠️ 部分核实</div>
+        </div>
+        <div class="summary-item missing">
+          <div class="number">${summary.missing}</div>
+          <div class="label">❌ 缺失</div>
+        </div>
+        <div class="summary-item">
+          <div class="number" style="color: #9ca3af">${summary.unsupported}</div>
+          <div class="label">🚫 不支持</div>
+        </div>
+        <div class="summary-item">
+          <div class="number" style="color: #9ca3af">${summary.overclaimed}</div>
+          <div class="label">📊 过度申报</div>
+        </div>
+      </div>
+
+      <div class="verification-list">${rows}</div>
+
+      <!-- 最终建议卡片 -->
+      <div class="final-recommendation ${recClass}">
+        <span class="rec-icon">${recIcon}</span>
+        <span class="rec-label">🎯 最终建议</span>
+        <span class="rec-value">${recText}</span>
+      </div>
+
+      <div style="margin-top: 16px; padding: 16px; background: #f9fafb; border-radius: 8px; font-size: 13px; color: #6b7280;">
+        💰 Token消耗: ${j.cost?.total_tokens || 0} | 估算成本: ¥${(j.cost?.estimated_cost_cny || 0).toFixed(4)}
+        · <span style="font-size:12px">v${j.pipeline_version || '?'} · ${j.allocation_strategy || ''}</span>
+      </div>
+    `;
+
+    updateStats();
+  } catch (e) {
+    alert('获取报告失败: ' + e.message);
+  }
+}
+
+// 历史任务
+let currentFilter = 'all';
+let currentPage = 1;
+const pageSize = 10;
+
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  const pagination = document.getElementById('pagination');
+
+  // 筛选
+  const filtered = currentFilter === 'all'
+    ? historyLoaded
+    : historyLoaded.filter(t => t.status === currentFilter);
+
+  // 更新筛选器计数
+  document.getElementById('countAll').textContent = historyLoaded.length;
+  document.getElementById('countSucceeded').textContent = historyLoaded.filter(t => t.status === 'succeeded').length;
+  document.getElementById('countFailed').textContent = historyLoaded.filter(t => t.status === 'failed').length;
+  document.getElementById('countRunning').textContent = historyLoaded.filter(t => t.status === 'running' || t.status === 'pending').length;
+
+  if (filtered.length === 0) {
+    list.innerHTML = `
+      <div style="text-align: center; padding: 40px 20px; color: #9ca3af;">
+        <div style="font-size: 48px; margin-bottom: 12px;">📋</div>
+        <div>暂无历史任务</div>
+      </div>`;
+    pagination.style.display = 'none';
+    return;
+  }
+
+  // 分页
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  if (currentPage > totalPages) currentPage = totalPages;
+
+  const start = (currentPage - 1) * pageSize;
+  const end = start + pageSize;
+  const pageData = filtered.slice(start, end);
+
+  // 摘要 badge helper
+  function summaryBadge(task) {
+    if (!task.verification_summary) return '';
+    const s = task.verification_summary;
+    return `<div style="margin-top:6px;font-size:12px;display:flex;gap:4px;flex-wrap:wrap">
+      ${s.verified ? `<span style="color:#10b981;font-weight:600">✓${s.verified}</span>` : ''}
+      ${s.partial ? `<span style="color:#f59e0b;font-weight:600">~${s.partial}</span>` : ''}
+      ${s.missing ? `<span style="color:#ef4444;font-weight:600">✗${s.missing}</span>` : ''}
+    </div>`;
+  }
+
+  list.innerHTML = pageData.map((task) => {
+    const rec = task.final_recommendation || task.status;
+    const recClass = rec === 'VERIFIED' ? 'succeeded' : rec === 'PARTIAL' ? 'running' : rec === 'MISSING' ? 'failed' : 'pending';
+    return `
+      <div class="history-item" onclick="loadTask('${task.task_id}')">
+        <div class="history-header">
+          <span class="status-badge ${task.status}">${task.status}</span>
+          ${task.container_number ? `<span style="font-size:13px;color:#374151;font-weight:600">${task.container_number}</span>` : ''}
+          <span class="status-badge ${recClass}">${rec}</span>
+          <span class="history-time">${new Date(task.created_at).toLocaleString('zh-CN')}</span>
+        </div>
+        <div style="font-family:monospace;font-size:11px;color:#9ca3af;">${task.task_id}</div>
+        ${task.verification_summary ? summaryBadge(task) : ''}
+      </div>
+    `;
+  }).join('');
+
+  // 显示分页控件
+  if (totalPages > 1) {
+    pagination.style.display = 'flex';
+    document.getElementById('currentPage').textContent = currentPage;
+    document.getElementById('totalPages').textContent = totalPages;
+    document.getElementById('prevBtn').disabled = currentPage === 1;
+    document.getElementById('nextBtn').disabled = currentPage === totalPages;
+  } else {
+    pagination.style.display = 'none';
+  }
+}
+
+function filterHistory(status) {
+  currentFilter = status;
+  currentPage = 1;
+
+  // 更新按钮状态
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.classList.remove('active');
+    if (btn.dataset.status === status) {
+      btn.classList.add('active');
+    }
+  });
+
+  renderHistory();
+}
+
+function changePage(delta) {
+  currentPage += delta;
+  renderHistory();
+}
+
+function updateHistoryStatus(id, status) {
+  const task = historyLoaded.find(t => t.task_id === id);
+  if (task) {
+    task.status = status;
+    renderHistory();
+  }
+}
+
+async function loadTask(id) {
+  taskId = id;
+
+  try {
+    const j = await apiFetch(`/api/v1/audits/${id}`);
+
+    if (j.status === 'succeeded') {
+      // 如果任务成功，获取并显示报告
+      const reportJ = await apiFetch(`/api/v1/audits/${id}/report`);
+      currentReport = reportJ;
+
+      // 在模态框中显示报告（传入 j 作为任务详情，包含 photos 字段）
+      showReportInModal(reportJ, id, j);
+    } else if (j.status === 'failed') {
+      // 直接显示失败状态
+      clearInterval(autoTimer);
+      autoTimer = null;
+      const errMsg = j.error?.message || '未知错误';
+      const errCode = j.error?.code || '';
+      document.getElementById('progressSection').innerHTML = `
+        <div class="progress-card" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+          <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div>
+              <div style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">❌ 任务失败</div>
+              <div class="task-id" style="word-break: break-all;">${errCode ? errCode + ': ' : ''}${errMsg}</div>
+            </div>
+            <button class="btn" onclick="resubmitTask()" style="background: rgba(255,255,255,0.2); color: white; padding: 6px 14px; font-size: 13px;">
+              🔄 重新提交
+            </button>
+          </div>
+        </div>`;
+      document.getElementById('progressSection').style.display = 'block';
+      document.getElementById('progressSection').scrollIntoView({ behavior: 'smooth' });
+    } else {
+      // 进行中/pending：重建进度卡片并显示状态
+      clearInterval(autoTimer);
+      autoTimer = null;
+      document.getElementById('progressSection').innerHTML = `
+        <div class="progress-card">
+          <div class="progress-header">
+            <div>
+              <div style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">任务进行中</div>
+              <div class="task-id">Task ID: <span id="taskId">${id}</span></div>
+            </div>
+            <div id="taskStatus"></div>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+          </div>
+          <div class="stage-info" id="stageInfo">正在准备...</div>
+          <div style="margin-top: 16px; display: flex; gap: 12px;">
+            <button class="btn btn-secondary" onclick="pollOnce()" style="flex: 1;">
+              🔄 刷新状态
+            </button>
+            <button class="btn" id="autoBtn" onclick="toggleAuto()" style="flex: 1; background: rgba(255,255,255,0.2); color: white;">
+              ⏱️ 自动轮询: 关
+            </button>
+          </div>
+        </div>`;
+      document.getElementById('progressSection').style.display = 'block';
+      document.getElementById('progressSection').scrollIntoView({ behavior: 'smooth' });
+      await pollOnce();
+    }
+  } catch (e) {
+    alert('加载任务失败: ' + e.message);
+  }
+}
+
+// 在模态框中显示报告
+function showReportInModal(report, id, taskInfo) {
+  const summary = report.verification_summary;
+  const nameMap = (report && report.photo_name_map) || {};
+  const photoUrlMap = (report && report.photo_url_map) || {};
+  // v3.8-GG: photo_id → seq 映射
+  // 优先从报告的 photos 字段获取，否则从任务详情的 photos 字段获取
+  const seqMap = {};
+  if (report.photos) {
+    report.photos.forEach(p => { seqMap[p.photo_id] = p.seq; });
+  } else if (taskInfo && taskInfo.photos) {
+    taskInfo.photos.forEach(p => { seqMap[p.photo_id] = p.seq; });
+    // 同时更新 nameMap（API 返回的字段是 filename）
+    taskInfo.photos.forEach(p => {
+      if (!nameMap[p.photo_id] && p.filename) {
+        nameMap[p.photo_id] = p.filename;
+      }
+    });
+  }
+
+  function photoChip(pid) {
+    const name = nameMap[pid] || pid;
+    const url = photoUrlMap[pid];
+    if (id) {
+      const apiUrl = `/api/v1/audits/${id}/photos/${pid}/image`;
+      return `<span class="photo-chip" title="${name}"><img src="${apiUrl}" class="photo-thumb" alt="${name}" onclick="event.stopPropagation();openModal('${apiUrl}')" onerror="this.style.display='none';this.nextSibling.style.display=''" /><noscript>${name}</noscript></span>`;
+    }
+    if (url && !url.startsWith('file://')) {
+      return `<span class="photo-chip" title="${name}"><img src="${url}" class="photo-thumb" alt="${name}" onclick="event.stopPropagation();openModal('${url}')" onerror="this.style.display='none';this.nextSibling.style.display=''" /><noscript>${name}</noscript></span>`;
+    }
+    return `<span class="photo-chip" title="${pid}">${name}</span>`;
+  }
+
+  // 关键照片缩略图单元格（模态框版本）
+  function keyPhotosCellModal(v, taskId, nameMap, seqMap, photoUrlMap) {
+    const total = v.core_photos ? v.core_photos.length : 0;
+    if (total === 0) {
+      return '<span style="color:#9ca3af;font-size:12px">—</span>';
+    }
+
+    let verifiedCount = 0;
+    if (v.core_photos_detail && v.core_photos_detail.length > 0) {
+      v.core_photos_detail.forEach(m => {
+        if (m.direction_score >= 0.6) verifiedCount++;
+      });
+    }
+
+    const label = `${total} 张照片 (${verifiedCount})`;
+    const thumbs = v.core_photos.slice(0, 4).map((pid, idx) => {
+      // 优先从 seqMap 获取 seq，否则用 core_photos_detail 的索引+1
+      let seq = seqMap ? seqMap[pid] : null;
+      if (!seq && seq !== 0) {
+        // 尝试从 core_photos_detail 中查找对应的索引
+        const detailIdx = v.core_photos_detail ? v.core_photos_detail.findIndex(d => d.photo_id === pid) : -1;
+        seq = detailIdx >= 0 ? detailIdx + 1 : idx + 1;
+      }
+      const name = nameMap[pid] || pid;
+      const apiUrl = `/api/v1/audits/${taskId}/photos/${pid}/image`;
+      let statusClass = '';
+      if (v.core_photos_detail && v.core_photos_detail[idx]) {
+        if (v.core_photos_detail[idx].direction_score >= 0.6) {
+          statusClass = 'verified';
+        }
+      }
+      return `<div class="key-photo-thumb ${statusClass}" onclick="event.stopPropagation();openModal('${apiUrl}')" title="#${seq} ${name}">
+        <img src="${apiUrl}" alt="${name}" onerror="this.style.opacity='0.3'" />
+      </div>`;
+    }).join('');
+    const overflow = total > 4 ? `<div class="key-photo-overflow">+${total - 4}</div>` : '';
+
+    return `<div class="key-photos-cell">
+      <div class="key-photos-count">${label}</div>
+      <div class="key-photos-thumb-row">
+        ${thumbs}${overflow}
+      </div>
+    </div>`;
+  }
+
+  // 生成单张照片的描述文字（供下方列表使用）- 模态框版本
+  function renderPhotoDescItemModal(m, taskId, nameMap, seqMap) {
+    const seq = seqMap ? (seqMap[m.photo_id] || '?') : '?';
+    const score = m.direction_score !== null && m.direction_score !== undefined
+      ? ` <span class="desc-score">(${Math.round(m.direction_score * 100)}%)</span>`
+      : ` <span class="desc-score">(N/A)</span>`;
+    const compMatch = m.component_match ? '<span class="desc-tag">P4-A1部件匹配</span>' : '';
+    const sideMatch = m.side_match ? '<span class="desc-tag">方向匹配</span>' : '';
+    let damageInfo = '';
+    if (m.labels && m.labels.length > 0) {
+      const damageLabels = m.labels.filter(l => l.includes('损伤') || l.includes('划痕') || l.includes('凹痕') || l.includes('变形'));
+      if (damageLabels.length > 0) {
+        damageInfo = ' + <span class="desc-tag">' + damageLabels.join(', ') + '</span>';
+      }
+    }
+    if (!damageInfo) {
+      damageInfo = m.has_damage ? ' + <span class="desc-tag">P5-B有损伤</span>' : '';
+    }
+    const parts = [compMatch, sideMatch].filter(Boolean);
+    const matchInfo = parts.length > 0 ? ' — ' + parts.join(' + ') : '';
+    return `photo_${seq}${score}${matchInfo}${damageInfo}`;
+  }
+
+  function renderPhotoCardModal(m, taskId, nameMap, seqMap) {
+    const name = nameMap[m.photo_id] || m.photo_id || '?';
+    let seq = seqMap ? (seqMap[m.photo_id] || '?') : '?';
+    const apiUrl = `/api/v1/audits/${taskId}/photos/${m.photo_id}/image`;
+    return `
+    <div class="photo-card" onclick="openModal('${apiUrl}')" title="#${seq} ${name}">
+      <div class="photo-thumb-wrap">
+        <img src="${apiUrl}" class="photo-thumb" alt="${name}" onerror="this.parentElement.style.background='#f3f4f6';this.style.display='none'" />
+      </div>
+      <div class="photo-name">#${seq} ${name}</div>
+    </div>`;
+  }
+
+  // cargo info section
+  let cargoHtml = '';
+  if (report.cargo_info) {
+    cargoHtml = `
+    <div class="cargo-info-section">
+      <div class="cargo-info-label">📦 货物</div>
+      <div>
+        <div class="cargo-info-name">${report.cargo_info.cargo_name || '未知'}</div>
+        ${report.cargo_info.confidence ? `<div class="cargo-info-confidence">置信度 ${(report.cargo_info.confidence * 100).toFixed(0)}%</div>` : ''}
+        ${report.cargo_info.cargo_desc ? `<div style="font-size:12px;color:#92400e;margin-top:2px">${report.cargo_info.cargo_desc}</div>` : ''}
+        ${report.cargo_info.source_photos && report.cargo_info.source_photos.length ? `<div class="cargo-info-source">来源照片: ${report.cargo_info.source_photos.map(pid => nameMap[pid] || pid).join(', ')}</div>` : ''}
+      </div>
+    </div>`;
+  }
+
+  const rows = report.item_verifications.map(v => {
+    const statusKey = v.verification_status || 'missing';
+    const statusMeta = {
+      verified: { icon: '✓', text: '已通过' },
+      partial: { icon: '!', text: '部分通过' },
+      missing: { icon: '×', text: '未通过' },
+      unsupported: { icon: '—', text: '不支持' },
+      overclaimed: { icon: '!', text: '疑似多报' },
+    }[statusKey] || { icon: '?', text: statusKey };
+
+    const paaTag = v.is_paa ? '<span class="tag-paa">PAA</span>' : '';
+    const suspTag = (v.component_suspicious || v.damage_suspicious || v.location_suspicious)
+      ? '<span class="tag-suspicious" title="可疑字段">⚠</span>' : '';
+    const strongTag = v.strong_match
+      ? `<span class="tag-strong-match">强匹配</span><span class="${v.match_source === 'exact' ? 'match-source-exact' : 'match-source-fuzzy'}">(${v.match_source === 'exact' ? '精确' : '模糊'})</span>`
+      : '';
+
+    // P3-C 强匹配照片明细（模态框版本，兼容没有明细字段的历史报告）。
+    const matchedDetails = (v.matched_photos || []).map(pid => {
+      const detail = (v.matched_photos_detail || []).find(m => m.photo_id === pid) || {};
+      const seq = seqMap ? (seqMap[pid] || '?') : '?';
+      const confidence = typeof detail.confidence === 'number'
+        ? ` <span class="desc-score">(${Math.round(detail.confidence * 100)}%)</span>`
+        : ` <span class="desc-score">(已核实)</span>`;
+      const sourceCn = (detail.match_source || v.match_source) === 'exact' ? '精确' : '模糊';
+      const recognized = detail.recognized_location || v.location_code || '?';
+      const target = detail.target_location || v.location_code || '?';
+      const labels = detail.labels && detail.labels.length
+        ? detail.labels
+        : [`P3-C Location ${sourceCn}匹配`, `识别 ${recognized} → 清单 ${target}`];
+      return `<li>photo_${seq}${confidence} — ${labels.map(label => `<span class="desc-tag">${label}</span>`).join(' + ')}</li>`;
+    }).join('');
+
+    const matchedSection = v.matched_photos && v.matched_photos.length ? `
+      <div class="item-meta-group" style="grid-column: 1 / -1;">
+        <div class="item-meta-group-title">✋ 强匹配照片</div>
+        <div class="item-photos-grid">
+          ${v.matched_photos.map(pid => {
+            const n = nameMap[pid] || pid;
+            const u = `/api/v1/audits/${id}/photos/${pid}/image`;
+            return `<div class="photo-card" onclick="openModal('${u}')" title="${n}">
+              <div class="photo-thumb-wrap"><img src="${u}" class="photo-thumb" alt="${n}" onerror="this.parentElement.style.background='#f3f4f6';this.style.display='none'" /></div>
+              <div class="photo-name">${n}</div>
+            </div>`;
+          }).join('')}
+        </div>
+        <ul class="photo-desc-list">
+          ${matchedDetails}
+        </ul>
+      </div>` : '';
+
+    let photosSection = '';
+    if (v.core_photos_detail && v.core_photos_detail.length) {
+      const descItems = v.core_photos_detail.map(m => `<li>${renderPhotoDescItemModal(m, id, nameMap, seqMap)}</li>`).join('');
+      photosSection = `
+      <div class="item-meta-group" style="grid-column: 1 / -1;">
+        <div class="item-meta-group-title">📷 候选照片 (${v.core_photos.length}张)</div>
+        <div class="item-photos-grid">
+          ${v.core_photos_detail.map(m => renderPhotoCardModal(m, id, nameMap, seqMap)).join('')}
+        </div>
+        <ul class="photo-desc-list">
+          ${descItems}
+        </ul>
+      </div>`;
+    } else if (v.core_photos && v.core_photos.length) {
+      photosSection = `
+      <div class="item-meta-group" style="grid-column: 1 / -1;">
+        <div class="item-meta-group-title">📷 候选照片 (${v.core_photos.length}张)</div>
+        <div class="item-photos-grid">
+          ${v.core_photos.map(pid => {
+            const n = nameMap[pid] || pid;
+            const u = `/api/v1/audits/${id}/photos/${pid}/image`;
+            return `<div class="photo-card" onclick="openModal('${u}')" title="${n}">
+              <div class="photo-thumb-wrap"><img src="${u}" class="photo-thumb" alt="${n}" onerror="this.parentElement.style.background='#f3f4f6';this.style.display='none'" /></div>
+              <div class="photo-name">${n}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }
+
+    const matchText = v.strong_match
+      ? `强匹配·${v.match_source === 'exact' ? '精确' : '模糊'}`
+      : (v.match_source && v.match_source !== 'none' ? v.match_source : '—');
+
+    return `
+    <article class="verification-card status-${statusKey}">
+      <div class="verification-card-head">
+        <div class="verification-copy">
+          <div class="verification-title">Item ${v.item_no} · ${v.component || '未识别'} ${paaTag}${suspTag} · ${v.damage_code || '—'}</div>
+          <div class="verification-facts">
+            <span><b>部件：</b>${v.component_name || v.component || '—'}</span>
+            <span><b>损伤：</b>${[v.damage_code, v.damage_name].filter(Boolean).join(' · ') || '—'}</span>
+            <span><b>位置：</b>${v.location_code || '—'}</span>
+            <span><b>匹配：</b>${matchText}</span>
+          </div>
+        </div>
+        <div class="verification-result-wrap">
+          <div class="verification-result">${statusMeta.icon} ${statusMeta.text}</div>
+          ${strongTag}
+        </div>
+      </div>
+      <div class="verification-text">
+        <div class="verification-text-line"><span class="verification-text-label">维修说明</span><span>${v.description || '—'}</span></div>
+        <div class="verification-text-line"><span class="verification-text-label">鉴定依据</span><span>${v.auditor_notes || (v.strong_match ? '照片标记与清单位置匹配' : '暂无补充说明')}</span></div>
+      </div>
+      <div class="verification-details">
+        ${matchedSection}
+        ${photosSection}
+        ${!matchedSection && !photosSection ? '<div class="verification-empty">本项未匹配到证据照片</div>' : ''}
+      </div>
+    </article>`;
+  }).join('');
+
+  // 最终建议颜色映射（模态框版本）
+  const recClass2 = report.final_recommendation === 'VERIFIED' ? '' : report.final_recommendation === 'PARTIAL' ? 'partial' : 'missing';
+  const recIcon2 = report.final_recommendation === 'VERIFIED' ? '✅' : report.final_recommendation === 'PARTIAL' ? '⚠️' : '❌';
+  const recText2 = report.final_recommendation === 'VERIFIED' ? 'Approve' : report.final_recommendation === 'PARTIAL' ? 'Review Required' : report.final_recommendation === 'MISSING' ? 'Reject' : report.final_recommendation || '-';
+
+  document.getElementById('modalReportContent').innerHTML = `
+    <div style="margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; padding-right: 50px;">
+      <h2 style="margin: 0; font-size: 24px; color: #111827;">稽核报告详情</h2>
+      <button class="btn btn-secondary" onclick="exportReportFromModal('${id}')" style="padding: 8px 16px; font-size: 13px;">
+        📥 导出报告
+      </button>
+    </div>
+
+    <div style="background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%); padding: 24px; border-radius: 12px; margin-bottom: 20px;">
+      <div style="font-size: 18px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
+        <span>🚢</span>
+        <span>集装箱号: ${report.container_number || '未识别'}</span>
+        <span style="margin-left: auto;" class="status-badge ${report.final_recommendation === 'VERIFIED' ? 'succeeded' : report.final_recommendation === 'MISSING' ? 'failed' : 'running'}">${report.final_recommendation}</span>
+      </div>
+      <div style="font-size: 14px; color: #6b7280; margin-bottom: 8px;">
+        共 <span style="font-weight: bold; color: #667eea;">${report.total_list_items || report.item_verifications.length}</span> 项
+      </div>
+      <div style="font-size: 13px; color: #6b7280;">Task ID: ${id}</div>
+    </div>
+
+    ${cargoHtml}
+
+    <div class="report-summary">
+      <div class="summary-item verified">
+        <div class="number">${summary.verified}</div>
+        <div class="label">✅ 已核实</div>
+      </div>
+      <div class="summary-item partial">
+        <div class="number">${summary.partial}</div>
+        <div class="label">⚠️ 部分核实</div>
+      </div>
+      <div class="summary-item missing">
+        <div class="number">${summary.missing}</div>
+        <div class="label">❌ 缺失</div>
+      </div>
+      <div class="summary-item">
+        <div class="number" style="color: #9ca3af">${summary.unsupported}</div>
+        <div class="label">🚫 不支持</div>
+      </div>
+      <div class="summary-item">
+        <div class="number" style="color: #9ca3af">${summary.overclaimed}</div>
+        <div class="label">📊 过度申报</div>
+      </div>
+    </div>
+
+    <div class="verification-list">${rows}</div>
+
+    <!-- 最终建议卡片 -->
+    <div class="final-recommendation ${recClass2}">
+      <span class="rec-icon">${recIcon2}</span>
+      <span class="rec-label">🎯 最终建议</span>
+      <span class="rec-value">${recText2}</span>
+    </div>
+
+    <div style="margin-top: 16px; padding: 16px; background: #f9fafb; border-radius: 8px; font-size: 13px; color: #6b7280;">
+      💰 Token消耗: ${report.cost?.total_tokens || 0} | 估算成本: ¥${(report.cost?.estimated_cost_cny || 0).toFixed(4)}
+      · <span style="font-size:12px">v${report.pipeline_version || '?'} · ${report.allocation_strategy || ''}</span>
+    </div>
+  `;
+
+  document.getElementById('reportModal').classList.add('show');
+}
+
+// 关闭报告模态框
+function closeReportModal(event) {
+  if (event && event.target.id !== 'reportModal') return;
+  document.getElementById('reportModal').classList.remove('show');
+}
+
+// 从模态框导出报告
+function exportReportFromModal(id) {
+  if (!currentReport) return;
+  const json = JSON.stringify(currentReport, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `audit_report_${id}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// 统计 (页面已移除统计卡片,保留为 no-op 以兼容旧调用)
+function updateStats() {
+}
+
+// 导出历史记录
+function exportHistory() {
+  if (historyLoaded.length === 0) {
+    alert('暂无历史记录可导出');
+    return;
+  }
+
+  const json = JSON.stringify(historyLoaded, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `audit_history_${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  alert(`已导出 ${historyLoaded.length} 条历史记录`);
+}
+
+// 导出报告
+function exportReport() {
+  if (!currentReport) return;
+  const json = JSON.stringify(currentReport, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `audit_report_${taskId}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>

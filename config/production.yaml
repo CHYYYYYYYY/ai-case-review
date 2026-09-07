@@ -1,0 +1,61 @@
+# 生产环境配置
+# LLM 部分与 development.yaml 完全一致, 保证本地调测的结论可直接外推到生产
+app:
+  env: production
+  log_level: INFO
+
+llm:
+  default_model: qwen3.7-plus
+  mock: false
+  providers:
+    qwen:
+      base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api_key_env: QWEN_API_KEY
+      qps: 5
+      timeout: 300
+    moonshot:
+      base_url: https://api.moonshot.cn/v1
+      api_key_env: MOONSHOT_API_KEY
+      qps: 3
+      timeout: 300
+  retry:
+    max_retries: 3
+    backoff_base: 2
+  temperature: 0.6
+
+worker:
+  concurrency: 4
+  task_soft_time_limit: 600
+  task_time_limit: 720
+
+database:
+  host_env: POSTGRES_HOST
+  port_env: POSTGRES_PORT
+  db_env: POSTGRES_DB
+  user_env: POSTGRES_USER
+  password_env: POSTGRES_PASSWORD
+  pool_size: 20
+
+redis:
+  host_env: REDIS_HOST
+  port_env: REDIS_PORT
+  queue_name: audit
+
+storage:
+  endpoint_env: MINIO_ENDPOINT
+  access_key_env: MINIO_ACCESS_KEY
+  secret_key_env: MINIO_SECRET_KEY
+  bucket_env: MINIO_BUCKET_PROD    # 生产用 prod 桶
+  secure: true
+
+upload:
+  max_photo_count: 30
+  max_file_size_mb: 10
+  allowed_types: ["image/jpeg", "image/png", "image/webp"]
+
+webhook:
+  max_retries: 3
+  backoff_seconds: [10, 60, 300]
+
+task:
+  retain_days: 30

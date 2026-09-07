@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
+htmlcov/
+.coverage
+
+# 环境
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+
+# 数据
+data/
+backups/
+uploads/
+*.db
+*.sqlite
+
+# 日志
+logs/
+*.log
+worker_log.txt
+celerybeat-schedule.*
+
+# 构建产物
+dist/
+build/
+
+# 测试夹具中的大文件
+tests/fixtures/golden/*.jpg
+tests/fixtures/golden/*.png
+tests/fixtures/golden/*.webp
+!tests/fixtures/golden/.gitkeep

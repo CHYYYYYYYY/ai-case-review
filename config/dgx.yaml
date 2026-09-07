@@ -1,0 +1,65 @@
+# DGX Spark 部署配置 — 对接宿主机 qwen3-VL vLLM
+app:
+  env: dgx
+  log_level: INFO
+
+llm:
+  default_provider: local
+  default_model: qwen3-vl
+  mock: false
+  allow_empty_api_key: true
+  providers:
+    local:
+      base_url: http://127.0.0.1:8080/v1
+      api_key_env: QWEN_API_KEY
+      qps: 5
+      timeout: 300
+    moonshot:
+      base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api_key_env: QWEN_API_KEY
+      qps: 4
+      timeout: 300
+  retry:
+    max_retries: 3
+    backoff_base: 2
+  temperature: 0.6
+
+worker:
+  concurrency: 2
+  task_soft_time_limit: 3600
+  task_time_limit: 3900
+
+database:
+  host_env: POSTGRES_HOST
+  port_env: POSTGRES_PORT
+  db_env: POSTGRES_DB
+  user_env: POSTGRES_USER
+  password_env: POSTGRES_PASSWORD
+  pool_size: 10
+
+redis:
+  host_env: REDIS_HOST
+  port_env: REDIS_PORT
+  password_env: REDIS_PASSWORD
+  queue_name: audit
+
+storage:
+  backend: local
+  local_dir_env: LOCAL_STORAGE_DIR
+  endpoint_env: MINIO_ENDPOINT
+  access_key_env: MINIO_ACCESS_KEY
+  secret_key_env: MINIO_SECRET_KEY
+  bucket_env: MINIO_BUCKET_PROD
+  secure: false
+
+upload:
+  max_photo_count: 30
+  max_file_size_mb: 10
+  allowed_types: ["image/jpeg", "image/png", "image/webp"]
+
+webhook:
+  max_retries: 3
+  backoff_seconds: [10, 60, 300]
+
+task:
+  retain_days: 30

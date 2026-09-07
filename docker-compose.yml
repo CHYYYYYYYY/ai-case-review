@@ -1,0 +1,76 @@
+# 本地开发用 docker-compose
+# 仅起基础设施(PG/Redis/MinIO), Python 服务本地 uvicorn 直接跑
+# 生产环境用 docker-compose.prod.yml 把 api/worker 也容器化
+version: "3.9"
+
+services:
+  postgres:
+    image: docker.m.daocloud.io/library/postgres:15
+    container_name: audit-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-audit}
+      POSTGRES_USER: ${POSTGRES_USER:-audit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-audit_dev_pwd}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-audit}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: docker.m.daocloud.io/library/redis:7-alpine
+    container_name: audit-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: docker.m.daocloud.io/minio/minio:latest
+    container_name: audit-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-audit_dev}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-audit_dev_secret}
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # 控制台
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 自动创建 MinIO 桶
+  minio-init:
+    image: docker.m.daocloud.io/minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-audit_dev} ${MINIO_SECRET_KEY:-audit_dev_secret};
+      mc mb -p local/${MINIO_BUCKET_DEV:-audit-dev} || true;
+      mc mb -p local/${MINIO_BUCKET_PROD:-audit-prod} || true;
+      mc anonymous set download local/${MINIO_BUCKET_DEV:-audit-dev} || true;
+      "
+
+volumes:
+  pg_data:
+  redis_data:
+  minio_data:

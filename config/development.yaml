@@ -1,0 +1,61 @@
+# 本地开发配置
+# LLM 部分与 production.yaml 保持完全一致(同模型同Key), 确保本地准确率与生产一致
+app:
+  env: development
+  log_level: DEBUG
+
+llm:
+  default_model: qwen3.7-plus
+  mock: false                    # 调试代码逻辑时可设 true, 跳过真实调用零成本
+  providers:
+    qwen:
+      base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api_key_env: QWEN_API_KEY
+      qps: 5
+      timeout: 300
+    moonshot:
+      base_url: https://api.moonshot.cn/v1
+      api_key_env: MOONSHOT_API_KEY
+      qps: 3
+      timeout: 300
+  retry:
+    max_retries: 3
+    backoff_base: 2
+  temperature: 0.6
+
+worker:
+  concurrency: 2                 # 本地省资源, 生产 4
+  task_soft_time_limit: 600      # 10 分钟软超时
+  task_time_limit: 720           # 12 分钟硬超时
+
+database:
+  host_env: POSTGRES_HOST
+  port_env: POSTGRES_PORT
+  db_env: POSTGRES_DB
+  user_env: POSTGRES_USER
+  password_env: POSTGRES_PASSWORD
+  pool_size: 5
+
+redis:
+  host_env: REDIS_HOST
+  port_env: REDIS_PORT
+  queue_name: audit
+
+storage:
+  endpoint_env: MINIO_ENDPOINT
+  access_key_env: MINIO_ACCESS_KEY
+  secret_key_env: MINIO_SECRET_KEY
+  bucket_env: MINIO_BUCKET_DEV    # 本地用 dev 桶
+  secure: false
+
+upload:
+  max_photo_count: 30
+  max_file_size_mb: 10
+  allowed_types: ["image/jpeg", "image/png", "image/webp"]
+
+webhook:
+  max_retries: 3
+  backoff_seconds: [10, 60, 300]
+
+task:
+  retain_days: 7                 # 任务记录保留 7 天后清理

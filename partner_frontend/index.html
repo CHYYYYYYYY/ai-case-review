@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>稽核报告</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="page-shell">
+    <div id="audit-report-root" class="loading">正在加载鉴定结果…</div>
+  </main>
+
+  <script>
+    // 客户后端可在返回 HTML 时覆盖此配置，或直接赋值 window.AUDIT_REPORT。
+    window.AUDIT_PAGE_CONFIG = window.AUDIT_PAGE_CONFIG || {
+      reportUrl: './sample-report.json',
+      imageBaseUrl: ''
+    };
+  </script>
+  <script src="./report-renderer.js"></script>
+  <script>
+    window.AuditReportRenderer.load(
+      document.getElementById('audit-report-root'),
+      window.AUDIT_PAGE_CONFIG,
+      window.AUDIT_REPORT
+    );
+  </script>
+</body>
+</html>

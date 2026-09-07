@@ -1,0 +1,61 @@
+{
+  "task_id": "aud_demo_001",
+  "container_number": "CSGU2457701",
+  "final_recommendation": "PARTIAL",
+  "verification_summary": {
+    "verified": 1,
+    "partial": 0,
+    "missing": 1,
+    "unsupported": 0,
+    "overclaimed": 0
+  },
+  "photo_mappings": [
+    {
+      "photosId": "COMPANY_PHOTO_001",
+      "photo_id": "ph_demo_001",
+      "seq": 1,
+      "filename": "container-left.jpg",
+      "photo_url": ""
+    }
+  ],
+  "item_verifications": [
+    {
+      "item_no": 1,
+      "component": "PAA/PAA",
+      "component_name": "波纹面板",
+      "damage_code": "BT",
+      "damage_name": "弯曲",
+      "location_code": "LX15",
+      "description": "Straighten side panel",
+      "verification_status": "verified",
+      "strong_match": true,
+      "match_source": "exact",
+      "auditor_notes": "P3-C 手写 Location 精确匹配（识别 LX15 → 清单 LX15）",
+      "matched_photos_detail": [
+        {
+          "photosId": "COMPANY_PHOTO_001",
+          "photo_id": "ph_demo_001",
+          "photo_name": "container-left.jpg",
+          "photo_url": "",
+          "confidence": 0.95,
+          "labels": ["P3-C Location 精确匹配", "P2-A部件识别-panel", "P2-A有损伤"]
+        }
+      ]
+    },
+    {
+      "item_no": 2,
+      "component": "PAA/PAA",
+      "component_name": "波纹面板",
+      "damage_code": "BR",
+      "damage_name": "断裂",
+      "location_code": "RB1N",
+      "description": "Insert or patch side panel",
+      "verification_status": "missing",
+      "strong_match": false,
+      "match_source": "none",
+      "auditor_notes": "无匹配照片",
+      "matched_photos_detail": [],
+      "core_photos_detail": []
+    }
+  ]
+}
