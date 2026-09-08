@@ -81,7 +81,89 @@
       '</article>';
   }
 
-  function renderItem(item, photos, options) {
+  function renderManualReview(item, taskId, options) {
+    if (options.manualReview === false) return '';
+    const review = item.manual_review;
+    const saved = review && typeof review.is_ai_correct === 'boolean';
+    const correct = saved && review.is_ai_correct === true;
+    const incorrect = saved && review.is_ai_correct === false;
+    const name = 'manual-review-' + taskId + '-' + item.item_no;
+    return '<section class="manual-review" data-task-id="' + escapeHtml(taskId) + '" data-item-no="' + escapeHtml(item.item_no) + '">' +
+      '<div class="manual-review-head"><b>人工复核：AI 审核结果是否正确？</b>' +
+      (saved ? '<span>已复核</span>' : '') + '</div>' +
+      '<div class="manual-review-options"><label><input type="radio" name="' + escapeHtml(name) + '" value="correct"' + (correct ? ' checked' : '') + '> AI 审核正确</label>' +
+      '<label><input type="radio" name="' + escapeHtml(name) + '" value="incorrect"' + (incorrect ? ' checked' : '') + '> AI 审核错误</label></div>' +
+      '<div class="manual-review-reason"' + (incorrect ? '' : ' hidden') + '><label>错误原因（必填）</label>' +
+      '<textarea maxlength="1000" placeholder="请说明 AI 判断错误的地方，方便后续优化">' + escapeHtml(review && review.reason || '') + '</textarea></div>' +
+      '<div class="manual-review-actions"><button type="button">' + (saved ? '更新复核' : '提交复核') + '</button><small></small></div></section>';
+  }
+
+  function bindManualReviews(container, options) {
+    container.onchange = function (event) {
+      const input = event.target.closest('.manual-review input[type="radio"]');
+      if (!input) return;
+      input.closest('.manual-review').querySelector('.manual-review-reason').hidden = input.value !== 'incorrect';
+    };
+    container.onclick = async function (event) {
+      const button = event.target.closest('.manual-review-actions button');
+      if (!button) return;
+      const panel = button.closest('.manual-review');
+      const selected = panel.querySelector('input[type="radio"]:checked');
+      const textarea = panel.querySelector('textarea');
+      const feedback = panel.querySelector('small');
+      feedback.className = '';
+      if (!selected) {
+        feedback.textContent = '请选择审核结果';
+        feedback.className = 'error';
+        return;
+      }
+      const payload = {
+        task_id: panel.dataset.taskId,
+        item_no: Number(panel.dataset.itemNo),
+        is_ai_correct: selected.value === 'correct',
+        reason: selected.value === 'correct' ? null : textarea.value.trim()
+      };
+      if (!payload.is_ai_correct && !payload.reason) {
+        feedback.textContent = '请填写错误原因';
+        feedback.className = 'error';
+        textarea.focus();
+        return;
+      }
+      button.disabled = true;
+      feedback.textContent = '正在保存…';
+      try {
+        if (typeof options.onReviewSubmit === 'function') {
+          await options.onReviewSubmit(payload);
+        } else if (typeof options.reviewUrlBuilder === 'function') {
+          const response = await fetch(options.reviewUrlBuilder(payload.task_id, payload.item_no), {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_ai_correct: payload.is_ai_correct, reason: payload.reason })
+          });
+          if (!response.ok) throw new Error('人工复核接口返回 HTTP ' + response.status);
+        } else {
+          throw new Error('请配置 onReviewSubmit 或 reviewUrlBuilder');
+        }
+        let saved = panel.querySelector('.manual-review-head span');
+        if (!saved) {
+          saved = document.createElement('span');
+          saved.textContent = '已复核';
+          panel.querySelector('.manual-review-head').appendChild(saved);
+        }
+        button.textContent = '更新复核';
+        feedback.textContent = '保存成功';
+        feedback.className = 'success';
+      } catch (error) {
+        feedback.textContent = '保存失败：' + (error.message || String(error));
+        feedback.className = 'error';
+      } finally {
+        button.disabled = false;
+      }
+    };
+  }
+
+  function renderItem(item, photos, options, taskId) {
     const statusKey = item.verification_status || 'missing';
     const status = STATUS[statusKey] || { icon: '?', text: statusKey };
     const evidence = evidenceFor(item, photos);
@@ -103,7 +185,8 @@
       '<div class="evidence"><div class="evidence-title">证据照片（' + evidence.length + '）</div>' +
       (evidence.length ? '<div class="photos">' + evidence.map(function (photo) {
         return renderPhoto(photo, options);
-      }).join('') + '</div>' : '<div class="empty">本项未匹配到证据照片</div>') + '</div></article>';
+      }).join('') + '</div>' : '<div class="empty">本项未匹配到证据照片</div>') + '</div>' +
+      renderManualReview(item, taskId, options) + '</article>';
   }
 
   function render(container, report, options) {
@@ -121,7 +204,8 @@
       [['verified', '已通过'], ['partial', '部分通过'], ['missing', '未通过'], ['unsupported', '不支持'], ['overclaimed', '疑似多报']]
         .map(function (entry) { return '<div class="summary-card ' + entry[0] + '"><b>' + Number(summary[entry[0]] || 0) + '</b><span>' + entry[1] + '</span></div>'; }).join('') +
       '</section><h2 class="section-heading">逐项鉴定明细</h2><section class="verification-list">' +
-      items.map(function (item) { return renderItem(item, photos, options); }).join('') + '</section>';
+      items.map(function (item) { return renderItem(item, photos, options, report.task_id || ''); }).join('') + '</section>';
+    bindManualReviews(container, options);
   }
 
   async function load(container, config, directReport) {

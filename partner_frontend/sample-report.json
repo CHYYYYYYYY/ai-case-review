@@ -31,6 +31,14 @@
       "strong_match": true,
       "match_source": "exact",
       "auditor_notes": "P3-C 手写 Location 精确匹配（识别 LX15 → 清单 LX15）",
+      "manual_review": {
+        "item_no": 1,
+        "ai_verification_status": "verified",
+        "is_ai_correct": true,
+        "reason": null,
+        "created_at": "2026-09-08T09:00:00+08:00",
+        "updated_at": "2026-09-08T09:00:00+08:00"
+      },
       "matched_photos_detail": [
         {
           "photosId": "COMPANY_PHOTO_001",

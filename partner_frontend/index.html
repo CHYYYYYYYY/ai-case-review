@@ -15,7 +15,12 @@
     // 客户后端可在返回 HTML 时覆盖此配置，或直接赋值 window.AUDIT_REPORT。
     window.AUDIT_PAGE_CONFIG = window.AUDIT_PAGE_CONFIG || {
       reportUrl: './sample-report.json',
-      imageBaseUrl: ''
+      imageBaseUrl: '',
+      // 演示环境只回显成功；正式接入请改为调用合作方自己的后端接口。
+      onReviewSubmit: function (review) {
+        console.log('人工复核演示数据：', review);
+        return Promise.resolve();
+      }
     };
   </script>
   <script src="./report-renderer.js"></script>

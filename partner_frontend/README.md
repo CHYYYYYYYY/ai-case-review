@@ -19,6 +19,7 @@
 3. 轮询 `GET /api/v1/audits/{task_id}`，或等待 `callback_url` 收到 `task.succeeded`。
 4. 合作方后端请求 `GET /api/v1/audits/{task_id}/report`。
 5. 合作方后端把该 JSON 返回给自己的前端，由 `report-renderer.js` 渲染。
+6. 用户在每个 Item 下提交人工复核，合作方前端调用自己的后端，由后端转发到人工复核接口。
 
 > API Key、Webhook Secret 等长期凭证只能保存在合作方后端，不得写入 HTML 或浏览器 JavaScript。
 
@@ -62,12 +63,33 @@ curl -X POST 'http://cd124615069w.vicp.fun:25740/api/v1/audits' \
 <script>
 window.AUDIT_PAGE_CONFIG = {
   reportUrl: '/company-api/audit-tasks/AUD_123/report',
-  imageBaseUrl: 'http://cd124615069w.vicp.fun:25740'
+  imageBaseUrl: 'http://cd124615069w.vicp.fun:25740',
+  reviewUrlBuilder: function (taskId, itemNo) {
+    return '/company-api/audit-tasks/' + encodeURIComponent(taskId) +
+      '/items/' + encodeURIComponent(itemNo) + '/manual-review';
+  }
 };
 </script>
 ```
 
 `reportUrl` 应指向合作方自己的同域后端接口。
+
+人工复核提交体为：
+
+```json
+{
+  "is_ai_correct": false,
+  "reason": "照片中能够看到该位置的损伤，AI 未识别"
+}
+```
+
+合作方后端收到后，再携带服务端保存的 API Key 转发到：
+
+```text
+PUT /api/v1/audits/{task_id}/items/{item_no}/manual-review
+```
+
+也可以配置 `onReviewSubmit(review)`，完全自行处理复核数据；该函数返回 Promise，成功时 resolve，失败时 reject。
 
 ## 方式二：后端渲染 HTML 时直接注入 JSON
 
@@ -95,7 +117,13 @@ fetch('/company-api/audit-tasks/AUD_123/report')
     window.AuditReportRenderer.render(
       document.getElementById('audit-report'),
       report,
-      { imageBaseUrl: 'http://cd124615069w.vicp.fun:25740' }
+      {
+        imageBaseUrl: 'http://cd124615069w.vicp.fun:25740',
+        reviewUrlBuilder: function (taskId, itemNo) {
+          return '/company-api/audit-tasks/' + encodeURIComponent(taskId) +
+            '/items/' + encodeURIComponent(itemNo) + '/manual-review';
+        }
+      }
     );
   });
 </script>
@@ -119,4 +147,4 @@ python -m http.server 8088
 
 ## 样式修改
 
-颜色、宽度和字体都集中在 `styles.css` 顶部的 CSS 变量中。详细区域默认全部展开，判定结果位于每个项目卡片右上角。
+颜色、宽度和字体都集中在 `styles.css` 顶部的 CSS 变量中。详细区域默认全部展开，判定结果位于每个项目卡片右上角，人工复核区位于每个项目底部。

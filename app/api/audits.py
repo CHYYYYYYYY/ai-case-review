@@ -17,13 +17,14 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.photo_ids import normalize_external_photo_ids
 from app.core.config import get_config
 from app.core.logging import get_logger
-from app.db.models import AuditReport, Task, TaskPhoto
+from app.db.models import AuditReport, ManualReview, Task, TaskPhoto
 from app.db.session import get_async_session
 from app.storage.object_store import get_object_store, LocalObjectStore
 from app.worker.tasks import run_audit_pipeline
@@ -31,6 +32,13 @@ from app.worker.tasks import run_audit_pipeline
 _log = get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/audits", tags=["稽核任务"])
+
+
+class ManualReviewRequest(BaseModel):
+    """人工复核 AI 对单个 Item 的判断。"""
+
+    is_ai_correct: bool
+    reason: str | None = Field(default=None, max_length=1000)
 
 
 def _gen_id(prefix: str) -> str:
@@ -78,6 +86,44 @@ def _enrich_report_photo_mappings(report: dict, photos: list[TaskPhoto]) -> dict
             for detail in item.get(key) or []:
                 if isinstance(detail, dict):
                     detail["photosId"] = external_by_photo_id.get(detail.get("photo_id"))
+    return enriched
+
+
+def _manual_review_payload(review: ManualReview) -> dict:
+    return {
+        "item_no": review.item_no,
+        "ai_verification_status": review.ai_verification_status,
+        "is_ai_correct": review.is_ai_correct,
+        "reason": review.reason,
+        "created_at": review.created_at.isoformat() if review.created_at else None,
+        "updated_at": review.updated_at.isoformat() if review.updated_at else None,
+    }
+
+
+def _normalize_manual_review_reason(is_ai_correct: bool, reason: str | None) -> str | None:
+    normalized = (reason or "").strip()
+    if not is_ai_correct and not normalized:
+        raise HTTPException(400, "AI 审核错误时必须填写原因")
+    return None if is_ai_correct else normalized
+
+
+def _enrich_report_manual_reviews(
+    report: dict,
+    reviews: list[ManualReview],
+) -> dict:
+    """把人工复核附加到响应；原始 AI 报告 JSON 保持只读。"""
+    enriched = deepcopy(report)
+    review_by_item = {review.item_no: review for review in reviews}
+    enriched["manual_reviews"] = [_manual_review_payload(review) for review in reviews]
+    for item in enriched.get("item_verifications") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            item_no = int(item.get("item_no"))
+        except (TypeError, ValueError):
+            continue
+        review = review_by_item.get(item_no)
+        item["manual_review"] = _manual_review_payload(review) if review else None
     return enriched
 
 
@@ -288,7 +334,84 @@ async def get_audit_report(
             select(TaskPhoto).where(TaskPhoto.task_id == task_id).order_by(TaskPhoto.seq)
         )
     ).scalars().all()
-    return _enrich_report_photo_mappings(report_row.report, list(photos))
+    reviews = (
+        await session.execute(
+            select(ManualReview)
+            .where(ManualReview.task_id == task_id)
+            .order_by(ManualReview.item_no)
+        )
+    ).scalars().all()
+    enriched = _enrich_report_photo_mappings(report_row.report, list(photos))
+    return _enrich_report_manual_reviews(enriched, list(reviews))
+
+
+@router.put("/{task_id}/items/{item_no}/manual-review")
+async def upsert_manual_review(
+    task_id: str,
+    item_no: int,
+    body: ManualReviewRequest,
+    session: AsyncSession = Depends(get_async_session),
+) -> dict:
+    """保存或更新单个维修项目的人工复核结果。"""
+    if item_no < 1:
+        raise HTTPException(400, "item_no 必须大于 0")
+
+    task = await session.get(Task, task_id)
+    if not task:
+        raise HTTPException(404, "task_not_found")
+    if task.status != "succeeded":
+        raise HTTPException(409, "task_not_ready", headers={"X-Task-Status": task.status})
+
+    report_row = await session.get(AuditReport, task_id)
+    if not report_row:
+        raise HTTPException(404, "report_not_found")
+
+    report_item = next(
+        (
+            item
+            for item in report_row.report.get("item_verifications", [])
+            if isinstance(item, dict) and str(item.get("item_no")) == str(item_no)
+        ),
+        None,
+    )
+    if report_item is None:
+        raise HTTPException(404, "item_not_found")
+
+    reason = _normalize_manual_review_reason(body.is_ai_correct, body.reason)
+
+    review = (
+        await session.execute(
+            select(ManualReview).where(
+                ManualReview.task_id == task_id,
+                ManualReview.item_no == item_no,
+            )
+        )
+    ).scalar_one_or_none()
+    if review is None:
+        review = ManualReview(
+            task_id=task_id,
+            item_no=item_no,
+            ai_verification_status=str(report_item.get("verification_status") or "missing"),
+            is_ai_correct=body.is_ai_correct,
+            reason=reason,
+        )
+        session.add(review)
+    else:
+        review.ai_verification_status = str(
+            report_item.get("verification_status") or "missing"
+        )
+        review.is_ai_correct = body.is_ai_correct
+        review.reason = reason
+
+    await session.commit()
+    await session.refresh(review)
+    _log.info(
+        "manual_review_saved",
+        task_id=task_id,
+        item_no=item_no,
+        is_ai_correct=body.is_ai_correct,
+    )
+    return _manual_review_payload(review)
 
 
 @router.get("/{task_id}/photos/{photo_id}")

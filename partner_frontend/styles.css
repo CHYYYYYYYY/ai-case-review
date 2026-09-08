@@ -82,6 +82,22 @@ body { margin: 0; background: var(--page-bg); color: var(--text); }
 .labels { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
 .label { padding: 3px 6px; border-radius: 5px; background: #eef4ff; color: #3c5f9d; font-size: 10px; }
 .confidence { margin-top: 6px; color: #059669; font-size: 11px; font-weight: 650; }
+.manual-review { margin: 0 22px 20px; padding: 16px 18px; border: 1px solid #dbe3ee; border-radius: 10px; background: #f8fafc; }
+.manual-review-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 14px; }
+.manual-review-head span { padding: 3px 8px; border-radius: 999px; background: #dcfce7; color: #15803d; font-size: 11px; font-weight: 650; }
+.manual-review-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.manual-review-options label { padding: 8px 12px; border: 1px solid #dbe3ee; border-radius: 8px; background: #fff; color: #374151; font-size: 13px; cursor: pointer; }
+.manual-review-options label:has(input:checked) { border-color: #667eea; background: #eef2ff; color: #4338ca; }
+.manual-review-reason { margin-top: 12px; }
+.manual-review-reason[hidden] { display: none; }
+.manual-review-reason label { display: block; margin-bottom: 6px; color: #4b5563; font-size: 12px; font-weight: 600; }
+.manual-review-reason textarea { width: 100%; min-height: 72px; resize: vertical; padding: 9px 10px; border: 1px solid #d1d5db; border-radius: 8px; font: inherit; font-size: 13px; }
+.manual-review-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.manual-review-actions button { padding: 8px 18px; border: 0; border-radius: 7px; background: #2563eb; color: #fff; font-weight: 650; cursor: pointer; }
+.manual-review-actions button:disabled { opacity: .55; cursor: wait; }
+.manual-review-actions small { color: var(--muted); }
+.manual-review-actions small.success { color: #15803d; }
+.manual-review-actions small.error { color: #dc2626; }
 
 @media (max-width: 820px) {
   .summary-grid { grid-template-columns: repeat(2, 1fr); }
@@ -100,6 +116,7 @@ body { margin: 0; background: var(--page-bg); color: var(--text); }
   .text-row { grid-template-columns: 68px minmax(0, 1fr); }
   .evidence { padding: 15px 16px 17px; }
   .photos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .manual-review { margin: 0 16px 16px; padding: 14px; }
 }
 
 @media print {

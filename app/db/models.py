@@ -5,6 +5,7 @@
   - task_photos     任务照片
   - task_stages     各阶段原始输出(用于调试与回放)
   - audit_reports   最终报告(1:1)
+  - manual_reviews  人工复核结果(任务 Item 维度)
 """
 from __future__ import annotations
 
@@ -70,6 +71,9 @@ class Task(Base):
     )
     report: Mapped[Optional["AuditReport"]] = relationship(
         back_populates="task", cascade="all, delete-orphan", uselist=False
+    )
+    manual_reviews: Mapped[List["ManualReview"]] = relationship(
+        back_populates="task", cascade="all, delete-orphan"
     )
 
 
@@ -143,3 +147,29 @@ class AuditReport(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     task: Mapped[Task] = relationship(back_populates="report")
+
+
+class ManualReview(Base):
+    """人工判断 AI 对单个维修项目的审核是否正确。"""
+
+    __tablename__ = "manual_reviews"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    task_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("tasks.task_id", ondelete="CASCADE"), index=True
+    )
+    item_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    ai_verification_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    is_ai_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    reason: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    task: Mapped[Task] = relationship(back_populates="manual_reviews")
+    __table_args__ = (
+        UniqueConstraint("task_id", "item_no", name="uq_manual_reviews_task_item"),
+    )

@@ -596,6 +596,84 @@
     color: #9ca3af;
     font-size: 13px;
   }
+  .manual-review-panel {
+    margin: 0 22px 20px;
+    padding: 16px 18px;
+    border: 1px solid #dbe3ee;
+    border-radius: 10px;
+    background: #f8fafc;
+  }
+  .manual-review-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .manual-review-title { color: #1f2937; font-size: 14px; font-weight: 700; }
+  .manual-review-saved {
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #dcfce7;
+    color: #15803d;
+    font-size: 11px;
+    font-weight: 650;
+  }
+  .manual-review-options { display: flex; flex-wrap: wrap; gap: 10px; }
+  .manual-review-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 12px;
+    border: 1px solid #dbe3ee;
+    border-radius: 8px;
+    background: #fff;
+    color: #374151;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .manual-review-option:has(input:checked) {
+    border-color: #667eea;
+    background: #eef2ff;
+    color: #4338ca;
+  }
+  .manual-review-reason { margin-top: 12px; }
+  .manual-review-reason[hidden] { display: none; }
+  .manual-review-reason label {
+    display: block;
+    margin-bottom: 6px;
+    color: #4b5563;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .manual-review-reason textarea {
+    width: 100%;
+    min-height: 72px;
+    resize: vertical;
+    padding: 9px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #fff;
+    color: #111827;
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .manual-review-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+  .manual-review-submit {
+    padding: 8px 18px;
+    border: 0;
+    border-radius: 7px;
+    background: #2563eb;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .manual-review-submit:disabled { opacity: .55; cursor: wait; }
+  .manual-review-feedback { color: #6b7280; font-size: 12px; }
+  .manual-review-feedback.success { color: #15803d; }
+  .manual-review-feedback.error { color: #dc2626; }
   @media (max-width: 760px) {
     .verification-card-head { gap: 12px; padding: 16px 16px 12px; }
     .verification-title { font-size: 15px; }
@@ -604,6 +682,7 @@
     .verification-text { padding: 0 16px 15px; }
     .verification-text-line { grid-template-columns: 68px minmax(0, 1fr); }
     .verification-details { padding: 15px 16px 17px; }
+    .manual-review-panel { margin: 0 16px 16px; padding: 14px; }
   }
 
   /* v3.8-GG 报告增强 */
@@ -1331,6 +1410,101 @@ async function apiFetch(url, options = {}) {
   return j;
 }
 
+function escapeReviewHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[char]));
+}
+
+function renderManualReview(review, reviewTaskId, itemNo, scope) {
+  const saved = review && typeof review.is_ai_correct === 'boolean';
+  const correct = saved && review.is_ai_correct === true;
+  const incorrect = saved && review.is_ai_correct === false;
+  const groupName = `manual-review-${scope}-${reviewTaskId}-${itemNo}`;
+  const reason = review?.reason || '';
+  return `
+    <section class="manual-review-panel" data-task-id="${reviewTaskId}" data-item-no="${itemNo}">
+      <div class="manual-review-head">
+        <div class="manual-review-title">👤 人工复核：AI 审核结果是否正确？</div>
+        ${saved ? '<span class="manual-review-saved">已复核</span>' : ''}
+      </div>
+      <div class="manual-review-options">
+        <label class="manual-review-option">
+          <input type="radio" name="${groupName}" value="correct" ${correct ? 'checked' : ''} onchange="toggleManualReviewReason(this)">
+          <span>AI 审核正确</span>
+        </label>
+        <label class="manual-review-option">
+          <input type="radio" name="${groupName}" value="incorrect" ${incorrect ? 'checked' : ''} onchange="toggleManualReviewReason(this)">
+          <span>AI 审核错误</span>
+        </label>
+      </div>
+      <div class="manual-review-reason" ${incorrect ? '' : 'hidden'}>
+        <label>错误原因（选择“AI 审核错误”时必填）</label>
+        <textarea maxlength="1000" placeholder="请说明 AI 判断错误的地方，方便后续优化">${escapeReviewHtml(reason)}</textarea>
+      </div>
+      <div class="manual-review-actions">
+        <button type="button" class="manual-review-submit" onclick="submitManualReview(this)">${saved ? '更新复核' : '提交复核'}</button>
+        <span class="manual-review-feedback"></span>
+      </div>
+    </section>`;
+}
+
+function toggleManualReviewReason(input) {
+  const panel = input.closest('.manual-review-panel');
+  const reason = panel.querySelector('.manual-review-reason');
+  reason.hidden = input.value !== 'incorrect';
+  if (!reason.hidden) reason.querySelector('textarea').focus();
+}
+
+async function submitManualReview(button) {
+  const panel = button.closest('.manual-review-panel');
+  const selected = panel.querySelector('input[type="radio"]:checked');
+  const feedback = panel.querySelector('.manual-review-feedback');
+  const textarea = panel.querySelector('textarea');
+  feedback.className = 'manual-review-feedback';
+  if (!selected) {
+    feedback.textContent = '请选择审核结果';
+    feedback.classList.add('error');
+    return;
+  }
+  const isAiCorrect = selected.value === 'correct';
+  const reason = textarea.value.trim();
+  if (!isAiCorrect && !reason) {
+    feedback.textContent = '请填写 AI 审核错误的原因';
+    feedback.classList.add('error');
+    textarea.focus();
+    return;
+  }
+
+  button.disabled = true;
+  feedback.textContent = '正在保存…';
+  try {
+    await apiFetch(
+      `/api/v1/audits/${encodeURIComponent(panel.dataset.taskId)}/items/${encodeURIComponent(panel.dataset.itemNo)}/manual-review`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_ai_correct: isAiCorrect, reason: isAiCorrect ? null : reason })
+      }
+    );
+    let badge = panel.querySelector('.manual-review-saved');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'manual-review-saved';
+      badge.textContent = '已复核';
+      panel.querySelector('.manual-review-head').appendChild(badge);
+    }
+    button.textContent = '更新复核';
+    feedback.textContent = '保存成功';
+    feedback.classList.add('success');
+  } catch (error) {
+    feedback.textContent = '保存失败：' + error.message;
+    feedback.classList.add('error');
+  } finally {
+    button.disabled = false;
+  }
+}
+
 // 拖拽上传
 function setupDragDrop() {
   const zones = [
@@ -1927,6 +2101,7 @@ async function getReport() {
           ${photosSection}
           ${!matchedSection && !photosSection ? '<div class="verification-empty">本项未匹配到证据照片</div>' : ''}
         </div>
+        ${renderManualReview(v.manual_review, taskId, v.item_no, 'main')}
       </article>`;
     }).join('');
 
@@ -2407,6 +2582,7 @@ function showReportInModal(report, id, taskInfo) {
         ${photosSection}
         ${!matchedSection && !photosSection ? '<div class="verification-empty">本项未匹配到证据照片</div>' : ''}
       </div>
+      ${renderManualReview(v.manual_review, id, v.item_no, 'modal')}
     </article>`;
   }).join('');
 

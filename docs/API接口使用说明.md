@@ -96,6 +96,7 @@ Authorization: Bearer <your-api-key>
 | POST | `/api/v1/audits` | 提交稽核任务 |
 | GET | `/api/v1/audits/{task_id}` | 查询任务状态与进度 |
 | GET | `/api/v1/audits/{task_id}/report` | 获取稽核报告（含照片匹配详情） |
+| PUT | `/api/v1/audits/{task_id}/items/{item_no}/manual-review` | 保存或更新人工复核结果 |
 | POST | `/api/v1/audits/{task_id}/cancel` | 取消任务 |
 | GET | `/api/v1/audits/{task_id}/photos/{photo_id}` | 照片中间结果（调试用） |
 | GET | `/api/v1/audits/{task_id}/photos/{photo_id}/image` | 照片图片二进制（浏览器可直接显示） |
@@ -576,7 +577,43 @@ while True:
 
 ---
 
-### 5.6 照片图片（浏览器可直接显示）
+### 5.6 人工复核 AI 结果
+
+**PUT** `/api/v1/audits/{task_id}/items/{item_no}/manual-review`
+
+用于记录人工判断 AI 对某个维修项目的审核是否正确。同一任务的同一 `item_no` 只保留一条记录，再次提交会更新原记录，不会修改原始 AI 报告。
+
+请求体：
+
+```json
+{
+  "is_ai_correct": false,
+  "reason": "照片中能够看到该位置的损伤，AI 未识别"
+}
+```
+
+规则：
+
+- `is_ai_correct=true` 时，`reason` 会被清空。
+- `is_ai_correct=false` 时，`reason` 必填，最长 1000 个字符。
+- 任务必须已经处理成功，且 `item_no` 必须存在于报告中。
+
+响应：
+
+```json
+{
+  "item_no": 2,
+  "ai_verification_status": "missing",
+  "is_ai_correct": false,
+  "reason": "照片中能够看到该位置的损伤，AI 未识别",
+  "created_at": "2026-09-08T09:00:00+08:00",
+  "updated_at": "2026-09-08T09:06:00+08:00"
+}
+```
+
+再次获取报告时，对应 `item_verifications[]` 会增加 `manual_review`；报告顶层也会返回 `manual_reviews` 数组。未复核的项目其 `manual_review` 为 `null`。
+
+### 5.7 照片图片（浏览器可直接显示）
 
 **GET** `/api/v1/audits/{task_id}/photos/{photo_id}/image`
 
@@ -588,7 +625,7 @@ while True:
 
 ---
 
-### 5.7 照片中间结果（调试用）
+### 5.8 照片中间结果（调试用）
 
 **GET** `/api/v1/audits/{task_id}/photos/{photo_id}`
 
@@ -620,7 +657,7 @@ while True:
 
 ---
 
-### 5.8 取消任务
+### 5.9 取消任务
 
 **POST** `/api/v1/audits/{task_id}/cancel`
 
@@ -639,7 +676,7 @@ while True:
 
 ---
 
-### 5.9 Webhook 回调
+### 5.10 Webhook 回调
 
 提交任务时传入 `callback_url`，任务**成功**后服务端主动 POST 通知。
 
