@@ -10,6 +10,7 @@
 - 异步任务状态查询、取消、Webhook 回调
 - 客户 `photosIds` 与系统 `photo_id` 双 ID 映射
 - 每个维修项目支持人工复核 AI 结果，错误原因可持久保存并在报告中回显
+- API Key 保护业务接口，管理网页通过短时 HttpOnly 会话访问
 - 只读 iframe 结果页与合作方 JSON 渲染模板
 
 ## 技术栈

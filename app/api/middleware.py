@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import os
+import hmac
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+
+from app.core.api_sessions import COOKIE_NAME, verify_api_session
 
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
@@ -14,6 +17,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
     EXEMPT_PATHS = {
         "/health", "/docs", "/redoc", "/openapi.json", "/",
         "/api/v1/embed-tokens",
+        "/api/v1/session",
     }
 
     async def dispatch(
@@ -38,7 +42,12 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
             if auth.lower().startswith("bearer "):
                 provided = auth[7:].strip()
 
-        if provided != api_key:
+        header_authenticated = bool(provided) and hmac.compare_digest(provided, api_key)
+        cookie_authenticated = verify_api_session(
+            request.cookies.get(COOKIE_NAME, ""),
+            api_key,
+        )
+        if not header_authenticated and not cookie_authenticated:
             return JSONResponse(status_code=401, content={"error": "unauthorized"})
 
         return await call_next(request)

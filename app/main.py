@@ -10,7 +10,7 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import audits, embed, health
+from app.api import audits, embed, health, session_auth
 from app.api.middleware import APIKeyMiddleware
 from app.core.config import get_config
 from app.core.logging import get_logger, setup_logging
@@ -48,6 +48,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(audits.router)
     app.include_router(embed.router)
+    app.include_router(session_auth.router)
     # CORS 必须加在 APIKeyMiddleware 之前，这样浏览器预检请求能直接过
     app.add_middleware(
         CORSMiddleware,

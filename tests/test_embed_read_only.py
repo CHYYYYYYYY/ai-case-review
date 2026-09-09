@@ -12,6 +12,10 @@ def test_embed_routes_bypass_global_key_for_their_own_scoped_auth() -> None:
     assert "/api/v1/embed-tokens" in APIKeyMiddleware.EXEMPT_PATHS
 
 
+def test_browser_session_login_bypasses_global_key_for_credential_exchange() -> None:
+    assert "/api/v1/session" in APIKeyMiddleware.EXEMPT_PATHS
+
+
 def test_admin_ui_has_no_delete_or_clear_history_controls() -> None:
     html = (PROJECT_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 
@@ -48,3 +52,13 @@ def test_admin_upload_generates_customer_photo_ids() -> None:
 
     assert "fd.append('photosIds'" in html
     assert "j.photo_mappings" in html
+
+
+def test_admin_ui_uses_short_lived_browser_session_for_api_key() -> None:
+    html = (PROJECT_ROOT / "static" / "index.html").read_text(encoding="utf-8")
+
+    assert "API 访问鉴权" in html
+    assert "fetch('/api/v1/session'" in html
+    assert "X-API-Key" in html
+    assert "sessionStorage.setItem" not in html
+    assert "localStorage.setItem" not in html

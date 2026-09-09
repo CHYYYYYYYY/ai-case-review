@@ -69,9 +69,7 @@
 
 ## 3. 鉴权
 
-当前环境**未启用** API Key 鉴权（`API_KEY` 为空）。
-
-若生产环境启用鉴权，请求头需携带：
+当前环境已启用 API Key 鉴权。除健康检查、接口文档和网页入口等公开路径外，请求需携带：
 
 ```
 X-API-Key: <your-api-key>
@@ -83,7 +81,9 @@ X-API-Key: <your-api-key>
 Authorization: Bearer <your-api-key>
 ```
 
-免鉴权路径：`/health`、`/docs`、`/`
+免全局 API Key 中间件路径：`/health`、`/docs`、`/redoc`、`/openapi.json`、`/`、`/static/*`、`/api/v1/session`，以及使用自身短期 Token 鉴权的嵌入页接口。
+
+管理网页在首次打开时会要求输入 API Key。验证成功后，服务端签发 8 小时的 HttpOnly 会话 Cookie；原始 API Key 不写入网页文件或浏览器存储。外部系统仍应在其后端请求中使用 `X-API-Key`，不得把长期 Key 放入浏览器代码。
 
 ---
 
@@ -92,6 +92,7 @@ Authorization: Bearer <your-api-key>
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/health` | 健康检查 |
+| POST | `/api/v1/session` | 管理网页用 API Key 换取短时会话 |
 | GET | `/api/v1/audits` | 历史任务列表（最新 50 条） |
 | POST | `/api/v1/audits` | 提交稽核任务 |
 | GET | `/api/v1/audits/{task_id}` | 查询任务状态与进度 |

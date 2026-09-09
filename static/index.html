@@ -44,6 +44,51 @@
     margin-bottom: 4px;
   }
   .title-area .subtitle { color: #6b7280; font-size: 14px; }
+  .auth-status { display: flex; align-items: center; gap: 10px; }
+  .auth-status-text { color: #047857; font-size: 13px; font-weight: 650; }
+  .auth-button {
+    padding: 8px 13px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #fff;
+    color: #374151;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .auth-button:hover { border-color: #10b981; color: #047857; }
+  .auth-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, .52);
+    backdrop-filter: blur(4px);
+  }
+  .auth-overlay.show { display: flex; }
+  .auth-dialog {
+    width: min(440px, 100%);
+    padding: 26px;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 24px 64px rgba(15, 23, 42, .25);
+  }
+  .auth-dialog h2 { margin: 0 0 8px; color: #111827; font-size: 21px; }
+  .auth-dialog p { margin: 0 0 18px; color: #6b7280; font-size: 13px; line-height: 1.7; }
+  .auth-dialog label { display: block; margin-bottom: 7px; color: #374151; font-size: 13px; font-weight: 650; }
+  .auth-dialog input {
+    display: block;
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 9px;
+    font: inherit;
+  }
+  .auth-dialog input:focus { outline: 2px solid #a7f3d0; border-color: #10b981; }
+  .auth-error { min-height: 20px; margin-top: 8px; color: #dc2626; font-size: 12px; }
+  .auth-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 13px; }
   .stats { display: flex; gap: 24px; }
   .stat-item { text-align: center; }
   .stat-item .num { font-size: 24px; font-weight: bold; color: #10b981; }
@@ -1204,6 +1249,10 @@
             <div class="subtitle">智能识别 · 自动匹配 · 精准核验</div>
           </div>
         </div>
+        <div class="auth-status">
+          <span class="auth-status-text" id="authStatusText">🔒 API 已鉴权</span>
+          <button type="button" class="auth-button" onclick="showAuthDialog()">更换 API Key</button>
+        </div>
       </div>
 
     <!-- 主内容区 -->
@@ -1358,6 +1407,19 @@
     </div>
   </div>
 
+  <div class="auth-overlay" id="authOverlay">
+    <form class="auth-dialog" onsubmit="authenticateBrowser(event)">
+      <h2>API 访问鉴权</h2>
+      <p>请输入管理员提供的 API Key。验证成功后仅保存短时安全会话，页面不会存储原始 Key。</p>
+      <label for="apiKeyInput">API Key</label>
+      <input id="apiKeyInput" type="password" autocomplete="current-password" required placeholder="请输入 API Key">
+      <div class="auth-error" id="authError"></div>
+      <div class="auth-actions">
+        <button type="submit" class="btn btn-primary" id="authSubmitButton">验证并进入</button>
+      </div>
+    </form>
+  </div>
+
 <script>
 let photos = [];          // 原始文件列表（File 对象）
 let photoIdMap = [];      // 提交后填充：[{blobUrl, photoId, seq, filename}]
@@ -1368,11 +1430,68 @@ let currentReport = null;
 let historyLoaded = [];
 
 // 初始化
-window.onload = () => {
+window.onload = async () => {
   updateStats();
-  fetchHistory();  // 从后端 API 拉历史
   setupDragDrop();
+  if (await hasBrowserSession()) {
+    setAuthenticatedState(true);
+    fetchHistory();
+  } else {
+    setAuthenticatedState(false);
+    showAuthDialog();
+  }
 };
+
+async function hasBrowserSession() {
+  try {
+    const response = await fetch('/api/v1/audits?limit=1', { cache: 'no-store' });
+    return response.ok;
+  } catch (_) {
+    return false;
+  }
+}
+
+function setAuthenticatedState(authenticated) {
+  const status = document.getElementById('authStatusText');
+  status.textContent = authenticated ? '🔒 API 已鉴权' : '🔓 等待 API Key';
+  status.style.color = authenticated ? '#047857' : '#dc2626';
+}
+
+function showAuthDialog(message = '') {
+  document.getElementById('authError').textContent = message;
+  document.getElementById('authOverlay').classList.add('show');
+  setTimeout(() => document.getElementById('apiKeyInput').focus(), 0);
+}
+
+async function authenticateBrowser(event) {
+  event.preventDefault();
+  const input = document.getElementById('apiKeyInput');
+  const button = document.getElementById('authSubmitButton');
+  const error = document.getElementById('authError');
+  const apiKey = input.value.trim();
+  if (!apiKey) return;
+
+  button.disabled = true;
+  button.textContent = '正在验证…';
+  error.textContent = '';
+  try {
+    const response = await fetch('/api/v1/session', {
+      method: 'POST',
+      headers: { 'X-API-Key': apiKey },
+      cache: 'no-store'
+    });
+    if (!response.ok) throw new Error(response.status === 401 ? 'API Key 不正确' : `鉴权失败（HTTP ${response.status}）`);
+    input.value = '';
+    document.getElementById('authOverlay').classList.remove('show');
+    setAuthenticatedState(true);
+    await fetchHistory();
+  } catch (authError) {
+    error.textContent = authError.message || String(authError);
+  } finally {
+    button.disabled = false;
+    button.textContent = '验证并进入';
+  }
+}
 
 // 从后端 API 拉取历史任务列表
 async function fetchHistory() {
@@ -1405,6 +1524,10 @@ async function apiFetch(url, options = {}) {
     throw new Error(`JSON 解析失败 (HTTP ${r.status}): ${text.slice(0, 200)}`);
   }
   if (!r.ok) {
+    if (r.status === 401) {
+      setAuthenticatedState(false);
+      showAuthDialog('登录状态已失效，请重新输入 API Key');
+    }
     throw new Error(JSON.stringify(j));
   }
   return j;
