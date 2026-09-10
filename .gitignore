@@ -8,6 +8,7 @@ venv/
 .mypy_cache/
 .ruff_cache/
 .DS_Store
+._*
 htmlcov/
 .coverage
 
@@ -36,6 +37,7 @@ celerybeat-schedule.*
 # 构建产物
 dist/
 build/
+/partner_frontend.zip
 
 # 测试夹具中的大文件
 tests/fixtures/golden/*.jpg
