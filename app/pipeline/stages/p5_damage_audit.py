@@ -11,6 +11,7 @@ from app.core.logging import get_logger
 from app.llm.prompt_loader import render_prompt
 from app.pipeline.schemas import DamageResult
 from app.pipeline.stages.base import BaseStage, StageResult, Timer
+from app.rules.iicl_codes import DAMAGE_NAMES, damage_type_matches_code
 from app.rules.mco_rules import is_mco_verdict_decided
 
 _log = get_logger(__name__)
@@ -77,6 +78,7 @@ class P5DamageAuditStage(BaseStage):
             photo_ids = item.core_photo_ids[:P5_B_MAX_PER_ITEM]
             evidence: list[str] = []
             reference: list[str] = []
+            compatible_reference: list[str] = []
             notes: list[str] = []
 
             for pid in photo_ids:
@@ -92,24 +94,39 @@ class P5DamageAuditStage(BaseStage):
                 # 用照片序号（#N）替代 photo_id，便于稽核员对照原图
                 photo = self.ctx.get_photo(pid)
                 ref = f"#{photo.seq}" if photo else pid
+                expected_damage = DAMAGE_NAMES.get(
+                    (item.damage_code or "").strip().upper(),
+                    item.damage_code or "未知损伤",
+                )
+                damage_matches = damage_type_matches_code(
+                    item.damage_code,
+                    dmg.damage_type,
+                )
 
-                if dir_score >= EVIDENCE_SCORE_THRESHOLD:
+                if damage_matches and dir_score >= EVIDENCE_SCORE_THRESHOLD:
                     evidence.append(pid)
                     notes.append(f"{ref} 证据照({dmg.damage_type}, score={dir_score:.2f})")
+                elif damage_matches:
+                    reference.append(pid)
+                    compatible_reference.append(pid)
+                    notes.append(f"{ref} 参考照({dmg.damage_type}, score={dir_score:.2f})")
                 else:
                     reference.append(pid)
-                    notes.append(f"{ref} 参考照({dmg.damage_type}, score={dir_score:.2f})")
+                    notes.append(
+                        f"{ref} 损伤不符(识别为{dmg.damage_type or '未知'}，"
+                        f"清单要求{expected_damage})"
+                    )
 
             item.photo_evidence_ids = evidence
             item.reference_photo_ids = reference
 
             if evidence:
                 item.verification_status = "verified"
-            elif reference:
+            elif compatible_reference:
                 item.verification_status = "partial"
             elif photo_ids:
                 item.verification_status = "unsupported"
-                notes.append("CORE 照片均未检出有效损伤")
+                notes.append("候选照片未检出与清单损伤相符的有效证据")
             else:
                 item.verification_status = "missing"
 

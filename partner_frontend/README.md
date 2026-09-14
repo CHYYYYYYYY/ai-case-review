@@ -55,6 +55,31 @@ curl -X POST 'http://cd124615069w.vicp.fun:25740/api/v1/audits' \
 - `photosId`：合作方上传时提供的业务 ID，用它回关合作方自己的照片记录。
 - `photo_id`：鉴定系统生成的内部 ID，用于调用照片接口。
 
+## 证据照片字段
+
+每个 `item_verifications` 项优先读取 `evidence_photos_detail`。它只包含真正参与“通过”判定的照片，不包含普通候选照片或损伤类型不符的参考照片：
+
+```json
+{
+  "verification_status": "verified",
+  "evidence_photos_detail": [
+    {
+      "photosId": "COMPANY_PHOTO_001",
+      "photo_id": "ph_aabbcc",
+      "photo_url": "/api/v1/audits/aud_xxx/photos/ph_aabbcc/image",
+      "evidence_role": "evidence",
+      "damage_type": "断裂"
+    }
+  ],
+  "reference_photos_detail": []
+}
+```
+
+- `evidence_photos_detail`：与清单部件、方向和损伤类型相符的有效证据。
+- `reference_photos_detail`：方向分不足或损伤类型不符的参考照片，不得据此显示“已通过”。
+- `core_photos_detail`：AI 处理过的候选照片集合，不能直接当作有效证据。
+- 兼容旧报告时，可用 `matched_photos_detail`、`photo_evidence` 作为证据字段的回退来源。
+
 ## 方式一：前端请求合作方自己的报告接口
 
 将 `index.html` 中的配置改为：

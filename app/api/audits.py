@@ -26,6 +26,7 @@ from app.core.config import get_config
 from app.core.logging import get_logger
 from app.db.models import AuditReport, ManualReview, Task, TaskPhoto
 from app.db.session import get_async_session
+from app.rules.iicl_codes import damage_type_matches_code
 from app.storage.object_store import get_object_store, LocalObjectStore
 from app.worker.tasks import run_audit_pipeline
 
@@ -82,10 +83,106 @@ def _enrich_report_photo_mappings(report: dict, photos: list[TaskPhoto]) -> dict
     for item in enriched.get("item_verifications") or []:
         if not isinstance(item, dict):
             continue
-        for key in ("matched_photos_detail", "core_photos_detail"):
+        for key in (
+            "matched_photos_detail",
+            "core_photos_detail",
+            "evidence_photos_detail",
+            "reference_photos_detail",
+        ):
             for detail in item.get(key) or []:
                 if isinstance(detail, dict):
                     detail["photosId"] = external_by_photo_id.get(detail.get("photo_id"))
+
+        # 兼容历史报告：过去 P5 会把“任意损伤”当成当前清单项的证据，
+        # 且没有统一的证据明细字段。读取时只校正响应副本，不改历史原始 JSON。
+        if not item.get("evidence_photos_detail"):
+            core_details = {
+                detail.get("photo_id"): detail
+                for detail in item.get("core_photos_detail") or []
+                if isinstance(detail, dict) and detail.get("photo_id")
+            }
+            matched_details = {
+                detail.get("photo_id"): detail
+                for detail in item.get("matched_photos_detail") or []
+                if isinstance(detail, dict) and detail.get("photo_id")
+            }
+            strong_ids = list(dict.fromkeys(item.get("matched_photos") or []))
+            raw_p5_ids = list(dict.fromkeys(item.get("photo_evidence") or []))
+            valid_p5_ids = [
+                photo_id
+                for photo_id in raw_p5_ids
+                if damage_type_matches_code(
+                    item.get("damage_code"),
+                    (core_details.get(photo_id) or {}).get("damage_type"),
+                )
+            ]
+
+            evidence_ids = list(dict.fromkeys([*strong_ids, *valid_p5_ids]))
+            evidence_details = []
+            for photo_id in evidence_ids:
+                detail = dict(
+                    matched_details.get(photo_id)
+                    or core_details.get(photo_id)
+                    or {"photo_id": photo_id}
+                )
+                detail["photosId"] = external_by_photo_id.get(photo_id)
+                detail["evidence_role"] = "evidence"
+                evidence_details.append(detail)
+            item["evidence_photos_detail"] = evidence_details
+            item["photo_evidence"] = valid_p5_ids
+
+            reference_ids = list(dict.fromkeys([
+                *(item.get("reference_photos") or []),
+                *(photo_id for photo_id in raw_p5_ids if photo_id not in valid_p5_ids),
+            ]))
+            reference_details = []
+            for photo_id in reference_ids:
+                detail = dict(core_details.get(photo_id) or {"photo_id": photo_id})
+                detail["photosId"] = external_by_photo_id.get(photo_id)
+                detail["evidence_role"] = "reference"
+                reference_details.append(detail)
+            item["reference_photos"] = reference_ids
+            item["reference_photos_detail"] = reference_details
+
+            is_hard_rule = str(item.get("mco_verdict") or "none") != "none"
+            if (
+                item.get("verification_status") == "verified"
+                and not evidence_ids
+                and not item.get("strong_match")
+                and not is_hard_rule
+            ):
+                compatible_reference = any(
+                    damage_type_matches_code(
+                        item.get("damage_code"), detail.get("damage_type")
+                    )
+                    for detail in reference_details
+                )
+                item["verification_status"] = (
+                    "partial" if compatible_reference
+                    else "unsupported" if item.get("core_photos")
+                    else "missing"
+                )
+                correction = "历史报告校正：原证据损伤类型与清单要求不符，不能判定为通过"
+                old_note = str(item.get("auditor_notes") or "").strip()
+                item["auditor_notes"] = f"{old_note} | {correction}" if old_note else correction
+
+    # 某个历史 Item 被校正后，汇总和总体结论必须与逐项结果保持一致。
+    report_items = enriched.get("item_verifications") or []
+    summary = {key: 0 for key in ("verified", "partial", "missing", "unsupported", "overclaimed")}
+    for item in report_items:
+        if isinstance(item, dict):
+            status_key = str(item.get("verification_status") or "missing")
+            summary[status_key if status_key in summary else "missing"] += 1
+    enriched["verification_summary"] = summary
+    total = len(report_items)
+    if total == 0:
+        enriched["final_recommendation"] = "MISSING"
+    elif summary["missing"] == 0 and summary["unsupported"] == 0:
+        enriched["final_recommendation"] = "VERIFIED"
+    elif summary["verified"] + summary["partial"] >= total / 2:
+        enriched["final_recommendation"] = "PARTIAL"
+    else:
+        enriched["final_recommendation"] = "MISSING"
     return enriched
 
 

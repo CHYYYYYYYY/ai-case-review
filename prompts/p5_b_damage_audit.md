@@ -45,6 +45,7 @@ Strict Rules:
 1. 只分析当前这一张照片。
 2. reason 必须用中文简要说明。
 3. 输出合法 JSON，不加 markdown 代码块，不加解释文字。
+4. damage_type 必须选择最接近的标准类型；不要把“锈迹”写成“断裂”，也不要用修补痕迹代替当前可见损伤。
 
 输出 JSON:
-{{"photo_id":"{photo_id}","has_damage":true/false,"damage_type":"凹痕/裂缝/变形/锈迹/修补痕迹/inspector标记/无","reason":"中文简要说明"}}
+{{"photo_id":"{photo_id}","has_damage":true/false,"damage_type":"弯曲/波浪变形/断裂/烧损/裂纹/锈蚀/污染/切割/凹陷/脏污/破洞/划伤/松动/缺失/标记/漆膜失效/刮擦/磨损/冻结/修补痕迹/无","reason":"中文简要说明"}}

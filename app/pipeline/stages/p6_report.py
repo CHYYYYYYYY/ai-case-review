@@ -187,6 +187,42 @@ class P6ReportStage(BaseStage):
                         "labels": labels,
                     })
 
+                # 对外提供一个语义明确、可直接渲染的证据数组。过去普通 P5
+                # 证据只出现在 photo_evidence（ID 数组）中，而强匹配照片位于
+                # matched_photos_detail，容易让调用方误判为“没有证据照片”。
+                core_detail_by_id = {
+                    detail["photo_id"]: detail for detail in core_photos_detail
+                }
+                matched_detail_by_id = {
+                    detail["photo_id"]: detail for detail in matched_photos_detail
+                }
+
+                def evidence_detail(photo_id: str, role: str) -> dict:
+                    detail = dict(
+                        matched_detail_by_id.get(photo_id)
+                        or core_detail_by_id.get(photo_id)
+                        or {
+                            "photosId": external_photo_id_map.get(photo_id),
+                            "photo_id": photo_id,
+                            "photo_name": photo_name_map.get(photo_id, photo_id),
+                            "photo_url": photo_url_map.get(photo_id, photo_id),
+                            "labels": [],
+                        }
+                    )
+                    detail["evidence_role"] = role
+                    return detail
+
+                evidence_photo_ids = list(dict.fromkeys(
+                    [*item.matched_photo_ids, *item.photo_evidence_ids]
+                ))
+                evidence_photos_detail = [
+                    evidence_detail(pid, "evidence") for pid in evidence_photo_ids
+                ]
+                reference_photos_detail = [
+                    evidence_detail(pid, "reference")
+                    for pid in dict.fromkeys(item.reference_photo_ids)
+                ]
+
                 item_verifications.append({
                     "item_no": item.item_no,
                     "component": item.component,
@@ -206,7 +242,9 @@ class P6ReportStage(BaseStage):
                     "core_photos": [m.photo_id for m in item.core_photo_matches],
                     "core_photos_detail": core_photos_detail,
                     "photo_evidence": item.photo_evidence_ids,
+                    "evidence_photos_detail": evidence_photos_detail,
                     "reference_photos": item.reference_photo_ids,
+                    "reference_photos_detail": reference_photos_detail,
                     "auditor_notes": item.auditor_notes,
                     "direction": direction_info,
                     "mco_verdict": item.mco_verdict.value,

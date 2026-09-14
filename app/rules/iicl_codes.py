@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+import re
+
 # Component 标准代码 (60+ 项)
 COMPONENT_CODES: frozenset[str] = frozenset({
     "CPA", "CPS", "CPO", "CPI", "CPJ", "CFG", "RCI", "DAH", "DAA", "PAA",
@@ -100,6 +102,54 @@ DAMAGE_NAMES: dict[str, str] = {
     "OS": "标记残留/其他污渍",
     "DB": "危标残留",
 }
+
+# P5 视觉模型使用自然语言描述损伤。只有观察到的损伤与清单 Damage
+# 编码相符时，照片才可以作为“通过”证据；其他损伤只能作为参考。
+# 这里同时兼容历史模型已经输出过的常见同义词。
+DAMAGE_TYPE_ALIASES: dict[str, tuple[str, ...]] = {
+    "BT": ("弯曲", "弯折", "bent", "bend"),
+    "BW": ("弓形", "波浪变形", "变形", "bowed", "wave"),
+    "BR": ("断裂", "破裂", "折断", "broken", "break"),
+    "BN": ("烧损", "烧蚀", "火烧", "burn"),
+    "CK": ("裂纹", "裂缝", "开裂", "crack"),
+    "CO": ("锈蚀", "锈迹", "腐蚀", "corrosion", "rust"),
+    "CT": ("污染", "污染物", "contamination"),
+    "CU": ("切割", "切痕", "cut"),
+    "DT": ("凹损", "凹陷", "凹痕", "dent"),
+    "DY": ("脏污", "污垢", "dirty", "dirt"),
+    "HO": ("破洞", "孔洞", "洞", "hole"),
+    "IR": ("划伤", "擦伤", "scratch"),
+    "LO": ("松动", "松脱", "loose"),
+    "MS": ("缺失", "丢失", "missing"),
+    "ML": ("inspector标记", "检查员标记", "标记", "marking"),
+    "PF": ("漆膜失效", "漆面脱落", "涂层失效", "paint failure"),
+    "SA": ("刮擦", "擦痕", "scuff"),
+    "WT": ("磨损", "磨耗", "wear"),
+    "FZ": ("冻结", "冻损", "frozen", "freeze"),
+    "GD": ("凹陷", "凹痕", "凹损", "dent"),
+    "OS": ("标记残留", "其他污渍", "残留", "residue"),
+    "DB": ("危标残留", "危险品标识残留", "placard residue"),
+}
+
+
+def damage_type_matches_code(damage_code: str | None, damage_type: str | None) -> bool:
+    """判断视觉模型识别的损伤类型能否证明清单中的 Damage 编码。"""
+    aliases = DAMAGE_TYPE_ALIASES.get((damage_code or "").strip().upper())
+    observed = (damage_type or "").strip().lower()
+    if not aliases or not observed or observed in {"无", "none", "no damage"}:
+        return False
+
+    tokens = [
+        re.sub(r"[\s_-]+", "", token)
+        for token in re.split(r"[/、,，;；|]+", observed)
+        if token.strip()
+    ]
+    normalized_aliases = [re.sub(r"[\s_-]+", "", alias.lower()) for alias in aliases]
+    return any(
+        token == alias or alias in token
+        for token in tokens
+        for alias in normalized_aliases
+    )
 
 
 def is_valid_component(code: str | None) -> bool:

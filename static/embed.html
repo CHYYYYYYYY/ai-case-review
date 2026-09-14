@@ -186,8 +186,10 @@
             labels: Array.isArray(detail.labels) ? detail.labels : []
           });
         };
-        ['matched_photos_detail', 'core_photos_detail', 'photo_evidence', 'reference_photos',
-          'matched_photos', 'core_photos'].forEach(key => (item[key] || []).forEach(add));
+        const keys = Array.isArray(item.evidence_photos_detail) && item.evidence_photos_detail.length
+          ? ['evidence_photos_detail']
+          : ['matched_photos_detail', 'photo_evidence', 'matched_photos'];
+        keys.forEach(key => (item[key] || []).forEach(add));
         return [...result.values()];
       }
 

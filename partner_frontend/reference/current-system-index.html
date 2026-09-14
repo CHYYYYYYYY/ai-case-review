@@ -2130,8 +2130,15 @@ async function getReport() {
 
       // P3-C 强匹配照片明细。新报告使用后端保存的 confidence/labels；
       // 旧报告没有 matched_photos_detail 时，也根据现有字段给出可读的命中依据。
-      const matchedDetails = (v.matched_photos || []).map(pid => {
-        const detail = (v.matched_photos_detail || []).find(m => m.photo_id === pid) || {};
+      const evidenceDetails = (v.evidence_photos_detail && v.evidence_photos_detail.length)
+        ? v.evidence_photos_detail
+        : [...new Set([...(v.matched_photos || []), ...(v.photo_evidence || [])])].map(pid =>
+            (v.matched_photos_detail || []).find(m => m.photo_id === pid)
+            || (v.core_photos_detail || []).find(m => m.photo_id === pid)
+            || { photo_id: pid }
+          );
+      const matchedDetails = evidenceDetails.map(detail => {
+        const pid = detail.photo_id;
         const seq = seqMap ? (seqMap[pid] || '?') : '?';
         const confidence = typeof detail.confidence === 'number'
           ? ` <span class="desc-score">(${Math.round(detail.confidence * 100)}%)</span>`
@@ -2145,18 +2152,11 @@ async function getReport() {
         return `<li>photo_${seq}${confidence} — ${labels.map(label => `<span class="desc-tag">${label}</span>`).join(' + ')}</li>`;
       }).join('');
 
-      const matchedSection = v.matched_photos && v.matched_photos.length ? `
+      const matchedSection = evidenceDetails.length ? `
         <div class="item-meta-group" style="grid-column: 1 / -1;">
-          <div class="item-meta-group-title">✋ 强匹配照片</div>
+          <div class="item-meta-group-title">✋ 证据照片 (${evidenceDetails.length}张)</div>
           <div class="item-photos-grid">
-            ${v.matched_photos.map(pid => {
-              const n = nameMap[pid] || pid;
-              const u = `/api/v1/audits/${taskId}/photos/${pid}/image`;
-              return `<div class="photo-card" onclick="openModal('${u}')" title="${n}">
-                <div class="photo-thumb-wrap"><img src="${u}" class="photo-thumb" alt="${n}" onerror="this.parentElement.style.background='#f3f4f6';this.style.display='none'" /></div>
-                <div class="photo-name">${n}</div>
-              </div>`;
-            }).join('')}
+            ${evidenceDetails.map(m => renderPhotoCard(m, taskId, nameMap, seqMap)).join('')}
           </div>
           <ul class="photo-desc-list">
             ${matchedDetails}
@@ -2612,8 +2612,15 @@ function showReportInModal(report, id, taskInfo) {
       : '';
 
     // P3-C 强匹配照片明细（模态框版本，兼容没有明细字段的历史报告）。
-    const matchedDetails = (v.matched_photos || []).map(pid => {
-      const detail = (v.matched_photos_detail || []).find(m => m.photo_id === pid) || {};
+    const evidenceDetails = (v.evidence_photos_detail && v.evidence_photos_detail.length)
+      ? v.evidence_photos_detail
+      : [...new Set([...(v.matched_photos || []), ...(v.photo_evidence || [])])].map(pid =>
+          (v.matched_photos_detail || []).find(m => m.photo_id === pid)
+          || (v.core_photos_detail || []).find(m => m.photo_id === pid)
+          || { photo_id: pid }
+        );
+    const matchedDetails = evidenceDetails.map(detail => {
+      const pid = detail.photo_id;
       const seq = seqMap ? (seqMap[pid] || '?') : '?';
       const confidence = typeof detail.confidence === 'number'
         ? ` <span class="desc-score">(${Math.round(detail.confidence * 100)}%)</span>`
@@ -2627,18 +2634,11 @@ function showReportInModal(report, id, taskInfo) {
       return `<li>photo_${seq}${confidence} — ${labels.map(label => `<span class="desc-tag">${label}</span>`).join(' + ')}</li>`;
     }).join('');
 
-    const matchedSection = v.matched_photos && v.matched_photos.length ? `
+    const matchedSection = evidenceDetails.length ? `
       <div class="item-meta-group" style="grid-column: 1 / -1;">
-        <div class="item-meta-group-title">✋ 强匹配照片</div>
+        <div class="item-meta-group-title">✋ 证据照片 (${evidenceDetails.length}张)</div>
         <div class="item-photos-grid">
-          ${v.matched_photos.map(pid => {
-            const n = nameMap[pid] || pid;
-            const u = `/api/v1/audits/${id}/photos/${pid}/image`;
-            return `<div class="photo-card" onclick="openModal('${u}')" title="${n}">
-              <div class="photo-thumb-wrap"><img src="${u}" class="photo-thumb" alt="${n}" onerror="this.parentElement.style.background='#f3f4f6';this.style.display='none'" /></div>
-              <div class="photo-name">${n}</div>
-            </div>`;
-          }).join('')}
+          ${evidenceDetails.map(m => renderPhotoCardModal(m, id, nameMap, seqMap)).join('')}
         </div>
         <ul class="photo-desc-list">
           ${matchedDetails}

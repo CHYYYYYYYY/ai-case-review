@@ -56,8 +56,10 @@
         labels: asArray(detail.labels).length ? detail.labels : asArray(previous.labels)
       }));
     }
-    ['matched_photos_detail', 'core_photos_detail', 'photo_evidence', 'reference_photos',
-      'matched_photos', 'core_photos'].forEach(function (key) { asArray(item[key]).forEach(add); });
+    const keys = asArray(item.evidence_photos_detail).length
+      ? ['evidence_photos_detail']
+      : ['matched_photos_detail', 'photo_evidence', 'matched_photos'];
+    keys.forEach(function (key) { asArray(item[key]).forEach(add); });
     return Array.from(result.values());
   }
 
