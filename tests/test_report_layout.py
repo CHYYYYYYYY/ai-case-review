@@ -17,6 +17,9 @@ def test_main_and_history_reports_show_details_without_expand_click() -> None:
     assert "已通过" in html
     assert "部分通过" in html
     assert "未通过" in html
+    assert "RepairMove" in html
+    assert "箱号识别来源" in html
+    assert "photosId:" in html
 
 
 def test_each_report_item_has_persistent_manual_review_controls() -> None:

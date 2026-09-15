@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.api.audits import _enrich_report_photo_mappings
+from app.api.audits import _enrich_container_recognition, _enrich_report_photo_mappings
 
 
 def test_report_contains_customer_and_internal_photo_ids() -> None:
@@ -104,10 +104,75 @@ def test_legacy_report_downgrades_unrelated_damage_evidence() -> None:
     item = enriched["item_verifications"][0]
 
     assert report["item_verifications"][0]["verification_status"] == "verified"
-    assert item["verification_status"] == "unsupported"
+    assert item["verification_status"] == "missing"
     assert item["photo_evidence"] == []
     assert item["evidence_photos_detail"] == []
     assert item["reference_photos_detail"][0]["photosId"] == "COMPANY_RUST"
     assert "历史报告校正" in item["auditor_notes"]
-    assert enriched["verification_summary"]["unsupported"] == 1
+    assert enriched["verification_summary"]["missing"] == 1
     assert enriched["final_recommendation"] == "MISSING"
+
+
+def test_legacy_mco_pass_without_evidence_is_not_shown_as_verified() -> None:
+    report = {
+        "final_recommendation": "VERIFIED",
+        "verification_summary": {"verified": 1},
+        "item_verifications": [
+            {
+                "item_no": 1,
+                "verification_status": "verified",
+                "mco_verdict": "pass",
+                "matched_photos": [],
+                "photo_evidence": [],
+                "reference_photos": [],
+                "core_photos": [],
+            }
+        ],
+    }
+
+    enriched = _enrich_report_photo_mappings(report, [])
+
+    assert enriched["item_verifications"][0]["verification_status"] == "missing"
+    assert "无有效证据照片" in enriched["item_verifications"][0]["auditor_notes"]
+    assert enriched["verification_summary"]["missing"] == 1
+    assert enriched["final_recommendation"] == "MISSING"
+
+
+def test_legacy_report_gets_container_source_photo_mapping() -> None:
+    report = {"container_number": "OOLU0464523"}
+    photos = [
+        SimpleNamespace(
+            external_photo_id="235775153000006",
+            photo_id="ph_6",
+            task_id="aud_old",
+            seq=6,
+            original_filename="235775153000006.jpg",
+        )
+    ]
+    p1_payload = {
+        "tried_photos": [
+            {
+                "photo_id": "ph_6",
+                "raw": {
+                    "has_plate": True,
+                    "container_number": "OOLU0464523",
+                    "container_number_confidence": 0.9,
+                },
+            }
+        ]
+    }
+
+    enriched = _enrich_container_recognition(report, photos, p1_payload)
+
+    assert enriched["container_recognition"] == {
+        "container_number": "OOLU0464523",
+        "source": "photo",
+        "confidence": 0.9,
+        "source_photo": {
+            "photosId": "235775153000006",
+            "photo_id": "ph_6",
+            "seq": 6,
+            "filename": "235775153000006.jpg",
+            "photo_url": "/api/v1/audits/aud_old/photos/ph_6/image",
+        },
+    }

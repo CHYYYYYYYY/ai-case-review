@@ -75,6 +75,7 @@
         : '<div class="photo-placeholder">暂无图片地址</div>') +
       '<div class="photo-name" title="' + escapeHtml(photo.filename) + '">' + escapeHtml(photo.filename) + '</div>' +
       '<div class="photo-id">客户 photosId：' + escapeHtml(clientId) + '</div>' +
+      '<div class="photo-id">上传序号：#' + escapeHtml(photo.seq || '—') + '</div>' +
       '<div class="photo-id">系统 photo_id：' + escapeHtml(photo.photo_id) + '</div>' +
       confidence +
       (labels.length ? '<div class="labels">' + labels.map(function (label) {
@@ -180,7 +181,8 @@
       '<div class="facts"><span><b>部件：</b>' + escapeHtml(item.component_name || item.component || '—') + '</span>' +
       '<span><b>损伤：</b>' + escapeHtml(damage) + '</span>' +
       '<span><b>位置：</b>' + escapeHtml(item.location_code || '—') + '</span>' +
-      '<span><b>匹配：</b>' + escapeHtml(matchText) + '</span></div></div>' +
+      '<span><b>匹配：</b>' + escapeHtml(matchText) + '</span>' +
+      '<span><b>Total：</b>' + escapeHtml(item.total == null ? '—' : item.total) + '</span></div></div>' +
       '<div class="result-badge">' + escapeHtml(status.icon + ' ' + status.text) + '</div></div>' +
       '<div class="item-text"><div class="text-row"><span class="text-label">维修说明</span><span>' + escapeHtml(item.description || '—') + '</span></div>' +
       '<div class="text-row"><span class="text-label">鉴定依据</span><span>' + escapeHtml(note) + '</span></div></div>' +
@@ -197,10 +199,19 @@
     const items = asArray(report.item_verifications);
     const photos = photoMap(report);
     const recommendation = report.final_recommendation || '—';
+    const recognitionPhoto = report.container_recognition && report.container_recognition.source_photo;
+    const recognitionMeta = recognitionPhoto
+      ? '<span>箱号来源：photosId ' + escapeHtml(recognitionPhoto.photosId || '—') +
+        ' · 上传序号 #' + escapeHtml(recognitionPhoto.seq || '—') +
+        (typeof report.container_recognition.confidence === 'number'
+          ? ' · 置信度 ' + Math.round(report.container_recognition.confidence * 100) + '%'
+          : '') + '</span>'
+      : '';
     container.className = '';
     container.innerHTML = '<header class="report-head"><div><h1>集装箱维修稽核报告</h1>' +
       '<div class="report-meta"><span>集装箱号：' + escapeHtml(report.container_number || '未识别') + '</span>' +
-      '<span>Task ID：' + escapeHtml(report.task_id || '—') + '</span><span>共 ' + items.length + ' 项</span></div></div>' +
+      '<span>RepairMove：' + escapeHtml(report.repair_move == null ? '—' : report.repair_move) + '</span>' +
+      recognitionMeta + '<span>Task ID：' + escapeHtml(report.task_id || '—') + '</span><span>共 ' + items.length + ' 项</span></div></div>' +
       '<div class="overall-result"><span>总体结论</span><strong>' + escapeHtml(RECOMMENDATION[recommendation] || recommendation) + '</strong></div></header>' +
       '<section class="summary-grid">' +
       [['verified', '已通过'], ['partial', '部分通过'], ['missing', '未通过'], ['unsupported', '不支持'], ['overclaimed', '疑似多报']]

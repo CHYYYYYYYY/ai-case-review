@@ -13,6 +13,28 @@ from app.storage.object_store import get_object_store
 _log = get_logger(__name__)
 
 
+_VALID_STATUSES = {"verified", "partial", "missing", "unsupported", "overclaimed"}
+
+
+def _status_with_photo_evidence(item, available_photo_ids: set[str]) -> tuple[str, str]:
+    """执行报告最终不变量：没有实际照片支撑的 Item 不能显示为通过。"""
+    status = item.verification_status or "missing"
+    if status not in _VALID_STATUSES:
+        status = "missing"
+
+    evidence_ids = {
+        *item.matched_photo_ids,
+        *item.photo_evidence_ids,
+    } & available_photo_ids
+    reference_ids = set(item.reference_photo_ids) & available_photo_ids
+
+    if status == "verified" and not evidence_ids:
+        return "missing", "未匹配到有效证据照片，不能判定为通过"
+    if status == "partial" and not evidence_ids and not reference_ids:
+        return "missing", "未匹配到对应照片，不能判定为部分通过"
+    return status, ""
+
+
 class P6ReportStage(BaseStage):
     """P6: 报告编译."""
 
@@ -43,11 +65,18 @@ class P6ReportStage(BaseStage):
             }
 
             item_verifications = []
+            available_photo_ids = {p.photo_id for p in self.ctx.photos}
             for item in self.ctx.manifest_items:
-                status = item.verification_status or "missing"
-                if status not in summary:
-                    status = "missing"
+                status, status_correction = _status_with_photo_evidence(
+                    item, available_photo_ids
+                )
                 summary[status] += 1
+                auditor_notes = item.auditor_notes
+                if status_correction:
+                    auditor_notes = (
+                        f"{auditor_notes} | {status_correction}"
+                        if auditor_notes else status_correction
+                    )
 
                 comp_primary = (item.component or "").split("/", 1)[0].strip().upper()
 
@@ -234,6 +263,7 @@ class P6ReportStage(BaseStage):
                     "damage_code": item.damage_code,
                     "damage_name": DAMAGE_NAMES.get((item.damage_code or "").upper(), ""),
                     "description": item.description or "",
+                    "total": item.total,
                     "verification_status": status,
                     "strong_match": item.strong_match,
                     "match_source": item.match_source,
@@ -245,7 +275,7 @@ class P6ReportStage(BaseStage):
                     "evidence_photos_detail": evidence_photos_detail,
                     "reference_photos": item.reference_photo_ids,
                     "reference_photos_detail": reference_photos_detail,
-                    "auditor_notes": item.auditor_notes,
+                    "auditor_notes": auditor_notes,
                     "direction": direction_info,
                     "mco_verdict": item.mco_verdict.value,
                 })
@@ -265,6 +295,10 @@ class P6ReportStage(BaseStage):
             report = {
                 "task_id": self.ctx.task_id,
                 "container_number": self.ctx.container_number,
+                "container_recognition": self._container_recognition(
+                    photo_name_map, photo_url_map, external_photo_id_map
+                ),
+                "repair_move": self.ctx.repair_move,
                 "final_recommendation": recommendation,
                 "verification_summary": summary,
                 "total_list_items": total,
@@ -314,6 +348,31 @@ class P6ReportStage(BaseStage):
             payload=report,
             duration_ms=t.elapsed_ms,
         )
+
+    def _container_recognition(
+        self,
+        photo_name_map: dict[str, str],
+        photo_url_map: dict[str, str],
+        external_photo_id_map: dict[str, str | None],
+    ) -> dict:
+        """返回箱号值和精确来源，避免用含糊的“第 N 张”描述照片。"""
+        photo_id = self.ctx.container_source_photo_id
+        source_photo = None
+        if photo_id:
+            photo = self.ctx.get_photo(photo_id)
+            source_photo = {
+                "photosId": external_photo_id_map.get(photo_id),
+                "photo_id": photo_id,
+                "seq": photo.seq if photo else None,
+                "filename": photo_name_map.get(photo_id),
+                "photo_url": photo_url_map.get(photo_id),
+            }
+        return {
+            "container_number": self.ctx.container_number,
+            "source": self.ctx.container_number_source,
+            "confidence": self.ctx.container_number_confidence,
+            "source_photo": source_photo,
+        }
 
     @staticmethod
     def _recommendation(summary: dict[str, int], total: int) -> str:

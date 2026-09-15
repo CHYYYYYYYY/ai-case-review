@@ -1,6 +1,19 @@
 {
   "task_id": "aud_demo_001",
   "container_number": "CSGU2457701",
+  "container_recognition": {
+    "container_number": "CSGU2457701",
+    "source": "photo",
+    "confidence": 0.96,
+    "source_photo": {
+      "photosId": "COMPANY_PHOTO_001",
+      "photo_id": "ph_demo_001",
+      "seq": 1,
+      "filename": "container-left.jpg",
+      "photo_url": ""
+    }
+  },
+  "repair_move": 35.0,
   "final_recommendation": "PARTIAL",
   "verification_summary": {
     "verified": 1,
@@ -27,6 +40,7 @@
       "damage_name": "弯曲",
       "location_code": "LX15",
       "description": "Straighten side panel",
+      "total": 100.0,
       "verification_status": "verified",
       "strong_match": true,
       "match_source": "exact",
@@ -69,6 +83,7 @@
       "damage_name": "断裂",
       "location_code": "RB1N",
       "description": "Insert or patch side panel",
+      "total": 120.0,
       "verification_status": "missing",
       "strong_match": false,
       "match_source": "none",

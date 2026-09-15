@@ -364,6 +364,19 @@ while True:
 {
   "task_id": "aud_a1b2c3d4e5f678901234",
   "container_number": "ABCD1234567",
+  "container_recognition": {
+    "container_number": "ABCD1234567",
+    "source": "photo",
+    "confidence": 0.9,
+    "source_photo": {
+      "photosId": "COMPANY_PHOTO_006",
+      "photo_id": "ph_source006",
+      "seq": 6,
+      "filename": "photo_06.jpg",
+      "photo_url": "/api/v1/audits/aud_a1b2c3d4e5f678901234/photos/ph_source006/image"
+    }
+  },
+  "repair_move": 35.0,
   "final_recommendation": "PARTIAL",
   "verification_summary": {
     "verified": 3,
@@ -386,6 +399,7 @@ while True:
       "damage_name": "破损",
       "damage_suspicious": false,
       "location_suspicious": false,
+      "total": 100.0,
       "verification_status": "verified",
       "strong_match": false,
       "match_source": "none",
@@ -510,6 +524,7 @@ while True:
 | damage_name | string | 损伤中文名 |
 | damage_suspicious | bool | 损伤编码可疑 |
 | location_suspicious | bool | 位置编码可疑 |
+| total | number/null | 估价单当前 Item 的 Total 原始金额；空白或无法可靠识别时为 null |
 | verification_status | string | 验证状态（见下表） |
 | strong_match | bool | 手写强匹配命中（跳过 P4/P5） |
 | match_source | string | 强匹配来源（exact/fuzzy/none） |
@@ -543,10 +558,12 @@ while True:
 | **photo_id_list** | string[] | 照片 ID 列表（按上传顺序），用于前后端照片序号对应 |
 | **photo_mappings** | object[] | 客户 photosId 与系统 photo_id 的完整映射 |
 | **photos** | object[] | 照片详情数组（photosId / photo_id / seq / filename / photo_url） |
+| **container_recognition** | object | 箱号识别来源；若来自照片，source_photo 给出 photosId / photo_id / seq / filename / photo_url |
+| **repair_move** | number/null | 估价单箱级 RepairMove（移箱费）原始金额；空白或无法可靠识别时为 null |
 | photo_name_map | object | photo_id → 原始文件名映射 |
 | photo_url_map | object | photo_id → API 代理图片 URL 映射 |
 
-> 每条清单最多展示 **5 张**候选照片。每张照片按综合分（方向分 + 部件匹配加分 + 方向匹配加分）排序。
+> `verified` 必须至少有一张本任务中真实存在的证据照片；无证据照片的 Item 返回 `missing`（页面显示“未通过”）。每条清单最多展示 **5 张**候选照片。
 
 ##### verification_status（单项验证状态）
 

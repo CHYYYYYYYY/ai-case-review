@@ -6,6 +6,7 @@ P1-B: 单次调 LLM 提取清单表格数据行.
 from __future__ import annotations
 
 import re
+from math import isfinite
 
 from app.core.logging import get_logger
 from app.llm.prompt_loader import render_prompt
@@ -16,6 +17,23 @@ _log = get_logger(__name__)
 
 # 11 位箱号正则: 4 字母 + 7 数字
 _CONTAINER_NO_RE = re.compile(r"^[A-Z]{4}\d{7}$")
+
+
+def _optional_number(value: object) -> float | None:
+    """把 OCR 金额安全转成数值；无法可靠解析时保留为空。"""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+        return number if isfinite(number) else None
+    text = str(value).strip().replace(",", "")
+    if not text or text.lower() in {"null", "none", "n/a", "-", "--"}:
+        return None
+    match = re.search(r"-?\d+(?:\.\d+)?", text)
+    if not match:
+        return None
+    number = float(match.group())
+    return number if isfinite(number) else None
 
 
 class P1NameplateStage(BaseStage):
@@ -35,6 +53,9 @@ class P1NameplateStage(BaseStage):
                 parsed = result.parsed or {}
                 tried_photos.append({
                     "photo_id": photo.photo_id,
+                    "photosId": photo.external_photo_id,
+                    "seq": photo.seq,
+                    "filename": photo.original_filename,
                     "raw": parsed,
                 })
 
@@ -46,6 +67,15 @@ class P1NameplateStage(BaseStage):
                 number = parsed.get("container_number")
                 if has_plate and number and _CONTAINER_NO_RE.match(str(number).upper()):
                     container_number = str(number).upper()
+                    self.ctx.container_number_source = "photo"
+                    self.ctx.container_source_photo_id = photo.photo_id
+                    confidence = _optional_number(
+                        parsed.get("container_number_confidence")
+                    )
+                    self.ctx.container_number_confidence = (
+                        max(0.0, min(1.0, confidence))
+                        if confidence is not None else None
+                    )
                     self.log.info("p1_a_hit", photo_id=photo.photo_id, container_number=container_number)
                     break
 
@@ -85,6 +115,7 @@ class P1ManifestOCRStage(BaseStage):
 
             data = result.parsed
             raw_items = data.get("items", []) or []
+            self.ctx.repair_move = _optional_number(data.get("repair_move"))
 
             # 校验条数, 异常标 suspicious 但不阻断
             if len(raw_items) > 15:
@@ -114,6 +145,7 @@ class P1ManifestOCRStage(BaseStage):
                     raw_repair_type=raw.get("raw_repair_type"),
                     parsed_size=raw.get("parsed_size"),
                     description=raw.get("description"),
+                    total=_optional_number(raw.get("total")),
                 ))
 
             items.sort(key=lambda x: x.item_no)
@@ -124,12 +156,19 @@ class P1ManifestOCRStage(BaseStage):
                 manifest_cn = data.get("container_number")
                 if manifest_cn and _CONTAINER_NO_RE.match(str(manifest_cn).upper()):
                     self.ctx.container_number = str(manifest_cn).upper()
+                    self.ctx.container_number_source = "manifest"
+                    self.ctx.container_number_confidence = None
+                    self.ctx.container_source_photo_id = None
 
             self.log.info("p1_b_done", items=len(items),
                           container_number=self.ctx.container_number)
 
         return self._make_result(
             success=True,
-            payload={"items_count": len(items), "raw_items": raw_items},
+            payload={
+                "items_count": len(items),
+                "repair_move": self.ctx.repair_move,
+                "raw_items": raw_items,
+            },
             duration_ms=t.elapsed_ms,
         )

@@ -22,6 +22,12 @@ Repair Code | Component | Repair Type | Length | Width | Pieces | Location | Dam
 - raw_repair_type: Repair Type列原始值
 - parsed_size: 尺寸（Length x Width）
 - description: Description列完整文本
+- total: 当前数据行 Total 列金额，仅输出数字；空白或看不清时输出 null
+
+另外提取整张估价单的箱级字段：
+- repair_move: 名称为 RepairMove（移箱费）的金额，仅输出数字；空白、未出现或看不清时输出 null
+
+注意：`total` 属于每个维修 Item；`repair_move` 属于整张估价单，不能把二者混在一起，也不能自行计算或猜测。
 
 === OCR常见混淆提醒 ===
 - O(欧) vs Q vs 0(零)：MCO常被误读为MCQ
@@ -34,6 +40,7 @@ Strict Rules:
 4. 如果识别出超过15条，重新检查行边界，合并错误拆分的行。
 5. 不确定字符用[模糊]标记。
 6. 输出合法 JSON，不加 markdown 代码块，不加解释文字。
+7. 金额字段只按原单提取，不根据其他列推算；没有可靠值必须输出 null。
 
 输出 JSON:
-{"container_number":"箱号或null","total_items_seen":N,"items":[{"item_no":1,"raw_text":"...","raw_component":"...","raw_location_code":"...","raw_damage_code":"...","raw_repair_type":"...","parsed_size":"...","description":"..."}]}
+{"container_number":"箱号或null","repair_move":null,"total_items_seen":N,"items":[{"item_no":1,"raw_text":"...","raw_component":"...","raw_location_code":"...","raw_damage_code":"...","raw_repair_type":"...","parsed_size":"...","total":100.0,"description":"..."}]}

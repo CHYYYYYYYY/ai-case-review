@@ -31,6 +31,8 @@ class ManifestItem:
     raw_repair_type: str | None = None
     parsed_size: str | None = None
     description: str | None = None
+    # 估价单当前维修项的 Total 金额。None 表示原单未提供或无法可靠识别。
+    total: float | None = None
 
     # P3 纠错后字段
     component: str | None = None          # 纠错后
@@ -171,6 +173,11 @@ class PipelineContext:
 
     # P1 输出
     container_number: str | None = None
+    container_number_source: str = "not_found"  # photo / manifest / not_found
+    container_number_confidence: float | None = None
+    container_source_photo_id: str | None = None
+    # 估价单箱级移箱费 RepairMove。
+    repair_move: float | None = None
     manifest_items: list[ManifestItem] = field(default_factory=list)
 
     # P2 输出

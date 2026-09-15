@@ -2065,7 +2065,8 @@ async function getReport() {
         <div class="photo-thumb-wrap">
           <img src="${apiUrl}" class="photo-thumb" alt="${name}" onerror="this.parentElement.style.background='#f3f4f6';this.style.display='none'" />
         </div>
-        <div class="photo-name">#${seq} ${name}</div>
+        <div class="photo-name">${m.photosId ? `photosId: ${m.photosId}` : `上传序号 #${seq}`}</div>
+        <div style="font-size:11px;color:#9ca3af;margin-top:3px">上传序号 #${seq} · ${name}</div>
       </div>`;
     }
 
@@ -2092,7 +2093,8 @@ async function getReport() {
       }
       const parts = [compMatch, sideMatch].filter(Boolean);
       const matchInfo = parts.length > 0 ? ' — ' + parts.join(' + ') : '';
-      return `photo_${seq}${score}${matchInfo}${damageInfo}`;
+      const identity = m.photosId ? `photosId ${m.photosId}（上传序号 #${seq}）` : `photo_${seq}`;
+      return `${identity}${score}${matchInfo}${damageInfo}`;
     }
 
     // cargo info section
@@ -2149,7 +2151,8 @@ async function getReport() {
         const labels = detail.labels && detail.labels.length
           ? detail.labels
           : [`P3-C Location ${sourceCn}匹配`, `识别 ${recognized} → 清单 ${target}`];
-        return `<li>photo_${seq}${confidence} — ${labels.map(label => `<span class="desc-tag">${label}</span>`).join(' + ')}</li>`;
+        const identity = detail.photosId ? `photosId ${detail.photosId}（上传序号 #${seq}）` : `photo_${seq}`;
+        return `<li>${identity}${confidence} — ${labels.map(label => `<span class="desc-tag">${label}</span>`).join(' + ')}</li>`;
       }).join('');
 
       const matchedSection = evidenceDetails.length ? `
@@ -2208,6 +2211,7 @@ async function getReport() {
               <span><b>损伤：</b>${[v.damage_code, v.damage_name].filter(Boolean).join(' · ') || '—'}</span>
               <span><b>位置：</b>${v.location_code || '—'}</span>
               <span><b>匹配：</b>${matchText}</span>
+              <span><b>Total：</b>${v.total ?? '—'}</span>
             </div>
           </div>
           <div class="verification-result-wrap">
@@ -2243,6 +2247,8 @@ async function getReport() {
         <div style="font-size: 14px; color: #6b7280; margin-bottom: 8px;">
           共 <span style="font-weight: bold; color: #667eea;">${j.total_list_items || j.item_verifications.length}</span> 项
         </div>
+        <div style="font-size: 13px; color: #6b7280; margin-bottom: 8px;">RepairMove: ${j.repair_move ?? '—'}</div>
+        ${j.container_recognition?.source_photo ? `<div style="font-size:13px;color:#6b7280">箱号识别来源：photosId ${j.container_recognition.source_photo.photosId || '—'} · 上传序号 #${j.container_recognition.source_photo.seq || '?'} · ${j.container_recognition.source_photo.filename || ''}${typeof j.container_recognition.confidence === 'number' ? ` · 置信度 ${Math.round(j.container_recognition.confidence * 100)}%` : ''}</div>` : ''}
       </div>
 
       ${cargoHtml}
@@ -2563,7 +2569,8 @@ function showReportInModal(report, id, taskInfo) {
     }
     const parts = [compMatch, sideMatch].filter(Boolean);
     const matchInfo = parts.length > 0 ? ' — ' + parts.join(' + ') : '';
-    return `photo_${seq}${score}${matchInfo}${damageInfo}`;
+    const identity = m.photosId ? `photosId ${m.photosId}（上传序号 #${seq}）` : `photo_${seq}`;
+    return `${identity}${score}${matchInfo}${damageInfo}`;
   }
 
   function renderPhotoCardModal(m, taskId, nameMap, seqMap) {
@@ -2575,7 +2582,8 @@ function showReportInModal(report, id, taskInfo) {
       <div class="photo-thumb-wrap">
         <img src="${apiUrl}" class="photo-thumb" alt="${name}" onerror="this.parentElement.style.background='#f3f4f6';this.style.display='none'" />
       </div>
-      <div class="photo-name">#${seq} ${name}</div>
+      <div class="photo-name">${m.photosId ? `photosId: ${m.photosId}` : `上传序号 #${seq}`}</div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:3px">上传序号 #${seq} · ${name}</div>
     </div>`;
   }
 
@@ -2631,7 +2639,8 @@ function showReportInModal(report, id, taskInfo) {
       const labels = detail.labels && detail.labels.length
         ? detail.labels
         : [`P3-C Location ${sourceCn}匹配`, `识别 ${recognized} → 清单 ${target}`];
-      return `<li>photo_${seq}${confidence} — ${labels.map(label => `<span class="desc-tag">${label}</span>`).join(' + ')}</li>`;
+      const identity = detail.photosId ? `photosId ${detail.photosId}（上传序号 #${seq}）` : `photo_${seq}`;
+      return `<li>${identity}${confidence} — ${labels.map(label => `<span class="desc-tag">${label}</span>`).join(' + ')}</li>`;
     }).join('');
 
     const matchedSection = evidenceDetails.length ? `
@@ -2689,6 +2698,7 @@ function showReportInModal(report, id, taskInfo) {
             <span><b>损伤：</b>${[v.damage_code, v.damage_name].filter(Boolean).join(' · ') || '—'}</span>
             <span><b>位置：</b>${v.location_code || '—'}</span>
             <span><b>匹配：</b>${matchText}</span>
+            <span><b>Total：</b>${v.total ?? '—'}</span>
           </div>
         </div>
         <div class="verification-result-wrap">
@@ -2731,6 +2741,8 @@ function showReportInModal(report, id, taskInfo) {
       <div style="font-size: 14px; color: #6b7280; margin-bottom: 8px;">
         共 <span style="font-weight: bold; color: #667eea;">${report.total_list_items || report.item_verifications.length}</span> 项
       </div>
+      <div style="font-size:13px;color:#6b7280;margin-bottom:8px">RepairMove: ${report.repair_move ?? '—'}</div>
+      ${report.container_recognition?.source_photo ? `<div style="font-size:13px;color:#6b7280;margin-bottom:8px">箱号识别来源：photosId ${report.container_recognition.source_photo.photosId || '—'} · 上传序号 #${report.container_recognition.source_photo.seq || '?'} · ${report.container_recognition.source_photo.filename || ''}${typeof report.container_recognition.confidence === 'number' ? ` · 置信度 ${Math.round(report.container_recognition.confidence * 100)}%` : ''}</div>` : ''}
       <div style="font-size: 13px; color: #6b7280;">Task ID: ${id}</div>
     </div>
 

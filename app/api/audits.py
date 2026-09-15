@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.photo_ids import normalize_external_photo_ids
 from app.core.config import get_config
 from app.core.logging import get_logger
-from app.db.models import AuditReport, ManualReview, Task, TaskPhoto
+from app.db.models import AuditReport, ManualReview, Task, TaskPhoto, TaskStage
 from app.db.session import get_async_session
 from app.rules.iicl_codes import damage_type_matches_code
 from app.storage.object_store import get_object_store, LocalObjectStore
@@ -64,6 +64,53 @@ def _photo_mapping(photo: TaskPhoto, *, include_url: bool = False) -> dict:
             f"/api/v1/audits/{photo.task_id}/photos/{photo.photo_id}/image"
         )
     return mapping
+
+
+def _enrich_container_recognition(
+    report: dict,
+    photos: list[TaskPhoto],
+    p1_payload: dict | None,
+) -> dict:
+    """给历史报告补齐箱号识别来源；新报告中的原生字段保持不变。"""
+    enriched = deepcopy(report)
+    if isinstance(enriched.get("container_recognition"), dict):
+        return enriched
+
+    photo_by_id = {photo.photo_id: photo for photo in photos}
+    source_photo = None
+    confidence = None
+    source = "not_found"
+    target_number = str(enriched.get("container_number") or "").strip().upper()
+    payload = p1_payload if isinstance(p1_payload, dict) else {}
+    for tried in payload.get("tried_photos") or []:
+        if not isinstance(tried, dict):
+            continue
+        raw = tried.get("raw") if isinstance(tried.get("raw"), dict) else {}
+        recognized = str(raw.get("container_number") or "").strip().upper()
+        if target_number and recognized == target_number and raw.get("has_plate"):
+            photo_id = tried.get("photo_id")
+            photo = photo_by_id.get(photo_id)
+            if photo:
+                source = "photo"
+                raw_confidence = raw.get("container_number_confidence")
+                confidence = (
+                    float(raw_confidence)
+                    if isinstance(raw_confidence, (int, float))
+                    else None
+                )
+                source_photo = _photo_mapping(photo, include_url=True)
+            break
+
+    if source == "not_found" and target_number:
+        # P1-A 没有照片命中而最终报告有箱号时，来源只能是估价单 P1-B。
+        source = "manifest"
+    enriched["container_recognition"] = {
+        "container_number": enriched.get("container_number"),
+        "source": source,
+        "confidence": confidence,
+        "source_photo": source_photo,
+    }
+    return enriched
 
 
 def _enrich_report_photo_mappings(report: dict, photos: list[TaskPhoto]) -> dict:
@@ -144,27 +191,51 @@ def _enrich_report_photo_mappings(report: dict, photos: list[TaskPhoto]) -> dict
             item["reference_photos"] = reference_ids
             item["reference_photos_detail"] = reference_details
 
-            is_hard_rule = str(item.get("mco_verdict") or "none") != "none"
             if (
                 item.get("verification_status") == "verified"
                 and not evidence_ids
                 and not item.get("strong_match")
-                and not is_hard_rule
             ):
-                compatible_reference = any(
-                    damage_type_matches_code(
-                        item.get("damage_code"), detail.get("damage_type")
-                    )
-                    for detail in reference_details
-                )
-                item["verification_status"] = (
-                    "partial" if compatible_reference
-                    else "unsupported" if item.get("core_photos")
-                    else "missing"
-                )
                 correction = "历史报告校正：原证据损伤类型与清单要求不符，不能判定为通过"
                 old_note = str(item.get("auditor_notes") or "").strip()
                 item["auditor_notes"] = f"{old_note} | {correction}" if old_note else correction
+
+        # 最终显示层的统一安全规则：无论是 MCO 硬规则、普通识别还是历史数据，
+        # “通过”都必须能指向本任务中真实存在的证据照片。
+        existing_photo_ids = set(external_by_photo_id)
+        evidence_ids = {
+            detail.get("photo_id")
+            for detail in item.get("evidence_photos_detail") or []
+            if isinstance(detail, dict) and detail.get("photo_id")
+        }
+        evidence_ids.update(item.get("matched_photos") or [])
+        evidence_ids.update(item.get("photo_evidence") or [])
+        evidence_ids &= existing_photo_ids
+        reference_ids = {
+            detail.get("photo_id")
+            for detail in item.get("reference_photos_detail") or []
+            if isinstance(detail, dict) and detail.get("photo_id")
+        }
+        reference_ids.update(item.get("reference_photos") or [])
+        reference_ids &= existing_photo_ids
+
+        correction = ""
+        if item.get("verification_status") == "verified" and not evidence_ids:
+            item["verification_status"] = "missing"
+            correction = "无有效证据照片，不能判定为通过"
+        elif (
+            item.get("verification_status") == "partial"
+            and not evidence_ids
+            and not reference_ids
+        ):
+            item["verification_status"] = "missing"
+            correction = "无对应照片，不能判定为部分通过"
+        if correction:
+            old_note = str(item.get("auditor_notes") or "").strip()
+            if correction not in old_note:
+                item["auditor_notes"] = (
+                    f"{old_note} | {correction}" if old_note else correction
+                )
 
     # 某个历史 Item 被校正后，汇总和总体结论必须与逐项结果保持一致。
     report_items = enriched.get("item_verifications") or []
@@ -239,19 +310,29 @@ async def list_audits(
 
     items = []
     for t in rows:
-        # 拉 report 中的 verification_summary（避免 N+1）
+        # 历史列表也使用与详情页相同的证据校正规则，避免列表显示旧的“通过”。
         summary = {}
+        final_recommendation = t.final_recommendation
         if t.status == "succeeded":
             rep = await session.get(AuditReport, t.task_id)
-            if rep and "verification_summary" in rep.report:
-                summary = rep.report["verification_summary"]
+            if rep:
+                photos = (
+                    await session.execute(
+                        select(TaskPhoto)
+                        .where(TaskPhoto.task_id == t.task_id)
+                        .order_by(TaskPhoto.seq)
+                    )
+                ).scalars().all()
+                corrected = _enrich_report_photo_mappings(rep.report, list(photos))
+                summary = corrected.get("verification_summary") or {}
+                final_recommendation = corrected.get("final_recommendation")
 
         items.append({
             "task_id": t.task_id,
             "status": t.status,
             "current_stage": t.current_stage,
             "container_number": t.container_number,
-            "final_recommendation": t.final_recommendation,
+            "final_recommendation": final_recommendation,
             "verification_summary": summary,
             "created_at": t.created_at.isoformat() if t.created_at else None,
             "finished_at": t.finished_at.isoformat() if t.finished_at else None,
@@ -438,7 +519,20 @@ async def get_audit_report(
             .order_by(ManualReview.item_no)
         )
     ).scalars().all()
+    p1_stage = (
+        await session.execute(
+            select(TaskStage)
+            .where(TaskStage.task_id == task_id, TaskStage.stage == "p1_a")
+            .order_by(TaskStage.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
     enriched = _enrich_report_photo_mappings(report_row.report, list(photos))
+    enriched = _enrich_container_recognition(
+        enriched,
+        list(photos),
+        p1_stage.payload if p1_stage else None,
+    )
     return _enrich_report_manual_reviews(enriched, list(reviews))
 
 

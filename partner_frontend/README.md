@@ -79,6 +79,38 @@ curl -X POST 'http://cd124615069w.vicp.fun:25740/api/v1/audits' \
 - `reference_photos_detail`：方向分不足或损伤类型不符的参考照片，不得据此显示“已通过”。
 - `core_photos_detail`：AI 处理过的候选照片集合，不能直接当作有效证据。
 - 兼容旧报告时，可用 `matched_photos_detail`、`photo_evidence` 作为证据字段的回退来源。
+- `verified` 必须至少有一张真实存在的 `evidence_photos_detail`；没有证据照片的 Item 会返回 `missing`（页面显示“未通过”）。
+
+## 箱号来源、Total 与 RepairMove
+
+报告会明确返回箱号来自哪一张上传照片，避免用“第 6 张”这类容易混淆的说法：
+
+```json
+{
+  "container_number": "OOLU0464523",
+  "container_recognition": {
+    "source": "photo",
+    "confidence": 0.9,
+    "source_photo": {
+      "photosId": "235775153000006",
+      "photo_id": "ph_xxx",
+      "seq": 6,
+      "filename": "235775153000006.jpg",
+      "photo_url": "/api/v1/audits/aud_xxx/photos/ph_xxx/image"
+    }
+  },
+  "repair_move": 35.0,
+  "item_verifications": [
+    {"item_no": 1, "total": 100.0}
+  ]
+}
+```
+
+- `container_recognition.source`：`photo`、`manifest` 或 `not_found`。
+- `container_recognition.source_photo`：箱号来自照片时的完整映射。
+- `item_verifications[].total`：估价单对应 Item 的 `Total` 原始金额。
+- `repair_move`：估价单箱级 `RepairMove`（移箱费）金额。
+- 金额为空或无法可靠识别时返回 `null`，服务端不会自行推算。
 
 ## 方式一：前端请求合作方自己的报告接口
 
