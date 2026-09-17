@@ -22,7 +22,7 @@ from openai import AsyncOpenAI, APIConnectionError, RateLimitError, APITimeoutEr
 
 from app.core.config import get_config
 from app.core.logging import get_logger
-from app.llm.json_fix import extract_and_parse
+from app.llm.json_fix import extract_and_parse_detailed
 from app.llm.limiter import get_limiter
 
 _log = get_logger(__name__)
@@ -46,6 +46,8 @@ class LLMCallResult:
     raw_response: Any = None
     error: str | None = None
     retries: int = 0
+    parse_error: str | None = None
+    finish_reason: str | None = None
 
     @property
     def total_tokens(self) -> int:
@@ -114,6 +116,16 @@ class LLMClient:
         limiter = get_limiter(self.provider, self._qps)
         last_error: str | None = None
         last_retries = 0
+        last_content = ""
+        last_raw_response: Any = None
+        last_parse_error: str | None = None
+        last_finish_reason: str | None = None
+        total_prompt_tokens = 0
+        total_completion_tokens = 0
+        total_duration_ms = 0
+
+        if extra_retry_hint:
+            content[0]["text"] = self._with_json_hint(prompt)
 
         for attempt in range(cfg.llm.retry_max):
             if attempt > 0:
@@ -134,22 +146,50 @@ class LLMClient:
                 duration_ms = int((time.monotonic() - t0) * 1000)
                 content_text = resp.choices[0].message.content or ""
                 usage = resp.usage
-                parsed = extract_and_parse(content_text)
+                raw_response = resp.model_dump() if hasattr(resp, "model_dump") else None
+                finish_reason = getattr(resp.choices[0], "finish_reason", None)
+                parse_result = extract_and_parse_detailed(content_text)
+                parsed = parse_result.parsed
+                prompt_tokens = usage.prompt_tokens if usage else 0
+                completion_tokens = usage.completion_tokens if usage else 0
+                total_prompt_tokens += prompt_tokens
+                total_completion_tokens += completion_tokens
+                total_duration_ms += duration_ms
+                last_content = content_text
+                last_raw_response = raw_response
+                last_parse_error = parse_result.error
+                last_finish_reason = finish_reason
                 result = LLMCallResult(
                     content=content_text,
                     parsed=parsed,
-                    tokens_prompt=usage.prompt_tokens if usage else 0,
-                    tokens_completion=usage.completion_tokens if usage else 0,
-                    duration_ms=duration_ms,
+                    tokens_prompt=total_prompt_tokens,
+                    tokens_completion=total_completion_tokens,
+                    duration_ms=total_duration_ms,
                     provider=self.provider,
                     model=self.model,
-                    raw_response=resp.model_dump() if hasattr(resp, "model_dump") else None,
+                    raw_response=raw_response,
                     retries=last_retries,
+                    parse_error=parse_result.error,
+                    finish_reason=finish_reason,
                 )
                 if parsed is None:
-                    _log.warning("llm_json_parse_failed",
-                                 provider=self.provider, model=self.model,
-                                 content_preview=content_text[:200])
+                    last_error = "llm_json_parse_failed"
+                    _log.warning(
+                        "llm_json_parse_failed",
+                        provider=self.provider,
+                        model=self.model,
+                        attempt=attempt + 1,
+                        max_attempts=cfg.llm.retry_max,
+                        parse_error=parse_result.error,
+                        finish_reason=finish_reason,
+                        content_length=len(content_text),
+                        content_preview=content_text[:500],
+                    )
+                    # 模型已经响应但 JSON 非法也属于可重试错误。旧逻辑在这里直接返回，
+                    # 导致偶发的截断/转义错误立即终止整个稽核任务。
+                    if attempt + 1 < cfg.llm.retry_max:
+                        continue
+                    result.error = last_error
                 return result
 
             except (RateLimitError, APITimeoutError, APIConnectionError) as e:
@@ -163,15 +203,18 @@ class LLMClient:
 
         # 全部失败
         return LLMCallResult(
-            content="",
+            content=last_content,
             parsed=None,
-            tokens_prompt=0,
-            tokens_completion=0,
-            duration_ms=0,
+            tokens_prompt=total_prompt_tokens,
+            tokens_completion=total_completion_tokens,
+            duration_ms=total_duration_ms,
             provider=self.provider,
             model=self.model,
+            raw_response=last_raw_response,
             error=last_error,
             retries=last_retries,
+            parse_error=last_parse_error,
+            finish_reason=last_finish_reason,
         )
 
     async def _to_image_url(self, ref: str) -> str:

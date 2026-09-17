@@ -5,6 +5,7 @@
   GET    /api/v1/audits/{task_id}        查询任务状态
   GET    /api/v1/audits/{task_id}/report 获取报告
   GET    /api/v1/audits/{task_id}/photos/{photo_id}  照片中间结果(调试)
+  POST   /api/v1/audits/{task_id}/retry  从失败阶段重试任务
   POST   /api/v1/audits/{task_id}/cancel 取消任务
 """
 from __future__ import annotations
@@ -714,3 +715,30 @@ async def cancel_audit(
     _log.info("audit_cancelled", task_id=task_id)
 
     return {"task_id": task_id, "status": "cancelled"}
+
+
+@router.post("/{task_id}/retry", status_code=status.HTTP_202_ACCEPTED)
+async def retry_failed_audit(
+    task_id: str,
+    session: AsyncSession = Depends(get_async_session),
+) -> dict:
+    """从 P1-B 重试 OCR 失败任务，不重复执行已经完成的 P1-A 照片扫描。"""
+    task = await session.get(Task, task_id)
+    if not task:
+        raise HTTPException(404, "task_not_found")
+    if task.status != "failed":
+        raise HTTPException(409, f"task_not_failed:{task.status}")
+    if task.current_stage != "p1_b":
+        raise HTTPException(409, f"retry_stage_not_supported:{task.current_stage}")
+
+    task.status = "pending"
+    task.current_stage = "p1_b"
+    task.progress_detail = "等待重试 P1-B 清单 OCR"
+    task.error_code = None
+    task.error_msg = None
+    task.finished_at = None
+    await session.commit()
+
+    run_audit_pipeline.delay(task_id, "p1_b")
+    _log.info("audit_retry_submitted", task_id=task_id, start_stage="p1_b")
+    return {"task_id": task_id, "status": "pending", "start_stage": "p1_b"}

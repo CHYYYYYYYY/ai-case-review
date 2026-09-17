@@ -109,15 +109,22 @@ class Orchestrator:
         self.llm = LLMClient()
         bind_task_context(ctx.task_id)
 
-    async def execute(self) -> None:
-        """执行完整流水线."""
+    async def execute(self, start_stage: str | None = None) -> None:
+        """执行流水线；失败任务可从指定阶段继续，避免重复昂贵的前置识别。"""
+        stage_names = [stage.stage_name for stage in PIPELINE_STAGES]
+        if start_stage is not None and start_stage not in stage_names:
+            raise ValueError(f"unknown start stage: {start_stage}")
+        start_index = stage_names.index(start_stage) if start_stage else 0
+        first_stage = PIPELINE_STAGES[start_index]
         _log.info("pipeline_start", task_id=self.ctx.task_id,
-                  photos=len(self.ctx.photos))
+                  photos=len(self.ctx.photos), start_stage=first_stage.stage_name)
 
-        self._update_task_status("running", current_stage="p1_a")
+        self._update_task_status("running", current_stage=first_stage.stage_name)
 
         total = len(PIPELINE_STAGES)
-        for idx, stage_def in enumerate(PIPELINE_STAGES, start=1):
+        for idx, stage_def in enumerate(
+            PIPELINE_STAGES[start_index:], start=start_index + 1
+        ):
             if self._is_cancelled():
                 _log.info("pipeline_cancelled", task_id=self.ctx.task_id)
                 return
@@ -143,8 +150,13 @@ class Orchestrator:
                           tokens=result.tokens_used)
 
                 if not result.success and stage_def.stage_name in FATAL_STAGES:
+                    error_code = f"{stage_def.stage_name}_failed"
+                    if result.error and result.error.startswith(
+                        f"{stage_def.stage_name}_"
+                    ):
+                        error_code = result.error
                     self._fail_task(
-                        f"{stage_def.stage_name}_failed",
+                        error_code,
                         result.error or "unknown",
                     )
                     _log.error("pipeline_fatal", stage=stage_def.stage_name, error=result.error)

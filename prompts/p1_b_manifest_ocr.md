@@ -41,6 +41,8 @@ Strict Rules:
 5. 不确定字符用[模糊]标记。
 6. 输出合法 JSON，不加 markdown 代码块，不加解释文字。
 7. 金额字段只按原单提取，不根据其他列推算；没有可靠值必须输出 null。
+8. JSON 字符串中的双引号、反斜杠和换行必须正确转义，禁止输出未转义的控制字符。
+9. 输出保持紧凑；`raw_text` 和 `description` 只保留当前数据行内容，不重复表头或其他行。
 
 输出 JSON:
 {"container_number":"箱号或null","repair_move":null,"total_items_seen":N,"items":[{"item_no":1,"raw_text":"...","raw_component":"...","raw_location_code":"...","raw_damage_code":"...","raw_repair_type":"...","parsed_size":"...","total":100.0,"description":"..."}]}

@@ -1,7 +1,7 @@
 """JSON 兜底修复测试."""
 from __future__ import annotations
 
-from app.llm.json_fix import extract_and_parse
+from app.llm.json_fix import extract_and_parse, extract_and_parse_detailed
 
 
 def test_plain_json():
@@ -35,3 +35,11 @@ def test_empty():
 
 def test_garbage():
     assert extract_and_parse("hello world no json here") is None
+
+
+def test_parse_error_includes_exact_position():
+    result = extract_and_parse_detailed('{"items":[{"item_no":1}')
+
+    assert result.parsed is None
+    assert "line 1" in result.error
+    assert "column" in result.error

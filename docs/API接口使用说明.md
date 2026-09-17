@@ -694,7 +694,32 @@ while True:
 
 ---
 
-### 5.10 Webhook 回调
+### 5.10 重试清单 OCR 失败任务
+
+**POST** `/api/v1/audits/{task_id}/retry`
+
+**响应码：** `202 Accepted`
+
+目前只允许重试状态为 `failed` 且失败阶段为 `p1_b` 的任务。服务会从
+P1-B 清单 OCR 继续执行，复用已经完成的 P1-A 箱号识别结果，不会重新扫描
+全部修箱照片。
+
+**响应示例：**
+
+```json
+{
+  "task_id": "aud_a1b2c3d4e5f678901234",
+  "status": "pending",
+  "start_stage": "p1_b"
+}
+```
+
+其他状态调用会返回 `409 Conflict`。任务历史阶段记录不会删除，新的 P1-B
+诊断结果会追加保存，便于问题追溯。
+
+---
+
+### 5.11 Webhook 回调
 
 提交任务时传入 `callback_url`，任务**成功**后服务端主动 POST 通知。
 

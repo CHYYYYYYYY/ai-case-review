@@ -106,10 +106,31 @@ class P1ManifestOCRStage(BaseStage):
             result = await self._call_llm(prompt, [self.ctx.manifest_image_url])
 
             if result.error or not result.parsed:
-                self.log.error("p1_b_failed", error=result.error)
+                error = result.error or "p1_b_empty_response"
+                if error == "llm_json_parse_failed":
+                    error = "p1_b_json_parse_failed"
+                diagnostic = {
+                    # 完整保留模型文本，便于确定是尾部截断、转义错误还是结构错误。
+                    "raw_content": result.content,
+                    "parse_error": result.parse_error,
+                    "finish_reason": result.finish_reason,
+                    "retries": result.retries,
+                    "provider": result.provider,
+                    "model": result.model,
+                    "tokens_prompt": result.tokens_prompt,
+                    "tokens_completion": result.tokens_completion,
+                }
+                self.log.error(
+                    "p1_b_failed",
+                    error=error,
+                    parse_error=result.parse_error,
+                    finish_reason=result.finish_reason,
+                    retries=result.retries,
+                )
                 return self._make_result(
                     success=False,
-                    error=result.error or "p1_b_empty_response",
+                    error=error,
+                    payload={"llm_diagnostic": diagnostic},
                     duration_ms=t.elapsed_ms,
                 )
 

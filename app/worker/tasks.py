@@ -18,7 +18,7 @@ from celery import Task as CeleryTask
 
 from app.core.config import get_config
 from app.core.logging import bind_task_context, get_logger, setup_logging
-from app.db.models import Task as AuditTaskModel, TaskPhoto
+from app.db.models import Task as AuditTaskModel, TaskPhoto, TaskStage
 from app.db.session import get_sync_session
 from app.pipeline.orchestrator import Orchestrator
 from app.pipeline.schemas import PhotoInfo, PipelineContext
@@ -51,11 +51,14 @@ class AuditTask(CeleryTask):
 
 
 @celery_app.task(name="app.worker.tasks.run_audit_pipeline", base=AuditTask, bind=True)
-def run_audit_pipeline(self, task_id: str) -> dict:
+def run_audit_pipeline(
+    self, task_id: str, start_stage: str | None = None
+) -> dict:
     """执行稽核流水线.
 
     Args:
         task_id: 任务 ID
+        start_stage: 可选恢复阶段。目前生产重试使用 p1_b，跳过已完成的铭牌识别。
 
     Returns:
         包含 status 与 report 摘要的 dict
@@ -81,7 +84,7 @@ def run_audit_pipeline(self, task_id: str) -> dict:
     # 运行异步流水线
     orchestrator = Orchestrator(ctx)
     try:
-        asyncio.run(orchestrator.execute())
+        asyncio.run(orchestrator.execute(start_stage=start_stage))
     except Exception as e:
         _log.exception("pipeline_execute_failed", task_id=task_id)
         # 兜底置 failed
@@ -148,11 +151,38 @@ def _load_context(task_id: str) -> PipelineContext | None:
             else task.manifest_url
         )
 
-        return PipelineContext(
+        ctx = PipelineContext(
             task_id=task_id,
             manifest_image_url=manifest_url,
             photos=photos,
+            container_number=task.container_number,
         )
+
+        # 从最新的 P1-A 结果恢复箱号来源信息。这样从 P1-B 继续执行时，
+        # 最终报告仍能正确展示来源照片和置信度，而不需要再次扫描全部照片。
+        if task.container_number:
+            p1_stage = (
+                session.query(TaskStage)
+                .filter_by(task_id=task_id, stage="p1_a")
+                .order_by(TaskStage.id.desc())
+                .first()
+            )
+            payload = p1_stage.payload if p1_stage and isinstance(p1_stage.payload, dict) else {}
+            target = task.container_number.strip().upper()
+            for tried in payload.get("tried_photos") or []:
+                raw = tried.get("raw") if isinstance(tried, dict) else None
+                recognized = str((raw or {}).get("container_number") or "").strip().upper()
+                if recognized != target or not (raw or {}).get("has_plate"):
+                    continue
+                ctx.container_number_source = "photo"
+                ctx.container_source_photo_id = tried.get("photo_id")
+                confidence = (raw or {}).get("container_number_confidence")
+                if isinstance(confidence, (int, float)):
+                    ctx.container_number_confidence = max(0.0, min(1.0, float(confidence)))
+                break
+            if ctx.container_number_source == "not_found":
+                ctx.container_number_source = "manifest"
+        return ctx
     finally:
         session.close()
 
