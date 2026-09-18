@@ -48,8 +48,13 @@ async def test_submit_returns_ordered_customer_to_internal_photo_mapping(
 ) -> None:
     session = _FakeSession()
     queued: list[str] = []
+
+    async def no_admission_limit(_session: object) -> None:
+        return None
+
     monkeypatch.setattr(audits, "get_object_store", lambda: _FakeObjectStore())
     monkeypatch.setattr(audits.run_audit_pipeline, "delay", queued.append)
+    monkeypatch.setattr(audits, "_reserve_submission_capacity", no_admission_limit)
 
     response = await audits.create_audit(
         manifest_image=_image("manifest.jpg", b"manifest"),
