@@ -1528,7 +1528,16 @@ async function apiFetch(url, options = {}) {
       setAuthenticatedState(false);
       showAuthDialog('登录状态已失效，请重新输入 API Key');
     }
-    throw new Error(JSON.stringify(j));
+    const detail = j && j.detail;
+    const error = new Error(
+      detail && typeof detail === 'object'
+        ? (detail.message || detail.code || JSON.stringify(j))
+        : (detail || JSON.stringify(j))
+    );
+    error.status = r.status;
+    error.code = detail && typeof detail === 'object' ? detail.code : null;
+    error.payload = j;
+    throw error;
   }
   return j;
 }
@@ -1829,7 +1838,11 @@ async function submitTask() {
     toggleAuto(true);
     pollOnce();
   } catch (e) {
-    alert('提交失败: ' + e.message);
+    if (e.code === 'AI_AUDIT_BUSY' || e.code === 'AI_AUDIT_DAILY_LIMIT_REACHED') {
+      alert(e.message + '\n当前请求未创建审核任务，请稍后再试。');
+    } else {
+      alert('提交失败: ' + e.message);
+    }
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<span>🚀</span><span>提交稽核任务</span>';

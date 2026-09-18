@@ -787,6 +787,9 @@ def audit_callback():
 | 404 | file_not_found | 照片文件不存在 |
 | 409 | task_not_ready | 任务未完成，报告不可用 |
 | 409 | task_already_{status} | 任务已结束，无法取消 |
+| 429 | `AI_AUDIT_BUSY` | 待处理队列达到配置上限，未创建任务，请稍后重试 |
+| 429 | `AI_AUDIT_DAILY_LIMIT_REACHED` | 当日接收任务数达到配置上限，未创建任务，请次日重试 |
+| 503 | `AI_AUDIT_ADMISSION_UNAVAILABLE` | 限流状态服务暂时不可用，为保护算力拒绝接收 |
 
 错误响应格式：
 
@@ -795,6 +798,26 @@ def audit_callback():
   "detail": "task_not_found"
 }
 ```
+
+审核忙碌响应示例（响应头同时包含 `Retry-After`，单位为秒）：
+
+```json
+{
+  "detail": {
+    "code": "AI_AUDIT_BUSY",
+    "message": "AI审核忙碌中，请稍后重试",
+    "reason": "queue_full",
+    "retryable": true,
+    "limit": 10,
+    "current": 10
+  }
+}
+```
+
+收到 HTTP 429 时服务端不会生成 `task_id`，也不会保存上传文件。调用方应将
+箱体 AI 审核状态置为“审核忙碌中”，不要标记成“审核失败”。队列上限和每日
+上限分别通过部署配置中的 `admission.max_pending_tasks`、
+`admission.max_daily_tasks` 调整；每日统计按北京时间自然日重置。
 
 ---
 

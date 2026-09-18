@@ -59,3 +59,11 @@ webhook:
 
 task:
   retain_days: 7                 # 任务记录保留 7 天后清理
+
+# 本地默认关闭；需要联调限流时可改为 true。
+admission:
+  enabled: false
+  max_pending_tasks: 10
+  max_daily_tasks: 20
+  retry_after_seconds: 600
+  reservation_ttl_seconds: 900

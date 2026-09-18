@@ -8,7 +8,6 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
-from pathlib import Path
 from typing import Any
 
 import yaml
@@ -130,6 +129,21 @@ class TaskConfig(BaseModel):
     retain_days: int = 7
 
 
+class AdmissionConfig(BaseModel):
+    """Audit submission back-pressure controls.
+
+    A value of 0 disables the corresponding limit.  The queue limit counts
+    jobs waiting in Redis (running jobs are not included), while the daily
+    limit counts accepted tasks using Asia/Shanghai calendar days.
+    """
+
+    enabled: bool = False
+    max_pending_tasks: int = 10
+    max_daily_tasks: int = 20
+    retry_after_seconds: int = 600
+    reservation_ttl_seconds: int = 900
+
+
 class AppConfig(BaseModel):
     env: str = "development"
     log_level: str = "INFO"
@@ -141,6 +155,7 @@ class AppConfig(BaseModel):
     upload: UploadConfig = UploadConfig()
     webhook: WebhookConfig = WebhookConfig()
     task: TaskConfig = TaskConfig()
+    admission: AdmissionConfig = AdmissionConfig()
 
 
 def _load_raw(env: str | None = None) -> dict[str, Any]:
@@ -193,6 +208,7 @@ def _build_config(raw: dict[str, Any]) -> AppConfig:
         upload=UploadConfig(**raw.get("upload", {})),
         webhook=WebhookConfig(**raw.get("webhook", {})),
         task=TaskConfig(**raw.get("task", {})),
+        admission=AdmissionConfig(**raw.get("admission", {})),
     )
 
 

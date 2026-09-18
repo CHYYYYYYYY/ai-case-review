@@ -63,3 +63,11 @@ webhook:
 
 task:
   retain_days: 30
+
+# 临时生产限流：避免算力不足时任务无限排队。
+admission:
+  enabled: true
+  max_pending_tasks: 10
+  max_daily_tasks: 20
+  retry_after_seconds: 600
+  reservation_ttl_seconds: 900

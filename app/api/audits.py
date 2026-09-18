@@ -17,18 +17,24 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.photo_ids import normalize_external_photo_ids
+from app.core.admission import (
+    AdmissionReservation,
+    release_audit_slot,
+    reserve_audit_slot,
+    shanghai_day_window,
+)
 from app.core.config import get_config
 from app.core.logging import get_logger
 from app.db.models import AuditReport, ManualReview, Task, TaskPhoto, TaskStage
 from app.db.session import get_async_session
 from app.rules.iicl_codes import damage_type_matches_code
-from app.storage.object_store import get_object_store, LocalObjectStore
+from app.storage.object_store import LocalObjectStore, get_object_store
 from app.worker.tasks import run_audit_pipeline
 
 _log = get_logger(__name__)
@@ -51,6 +57,72 @@ def _ext_from_filename(name: str) -> str:
     if "." in name:
         return name.rsplit(".", 1)[-1].lower()
     return "jpg"
+
+
+async def _reserve_submission_capacity(
+    session: AsyncSession,
+) -> AdmissionReservation | None:
+    """Apply queue/day limits before storing any uploaded file."""
+    cfg = get_config()
+    if not cfg.admission.enabled:
+        return None
+
+    day_start, day_end, day_key, daily_ttl = shanghai_day_window()
+    daily_count = int(
+        (
+            await session.execute(
+                select(func.count(Task.task_id)).where(
+                    Task.created_at >= day_start,
+                    Task.created_at < day_end,
+                )
+            )
+        ).scalar_one()
+    )
+    try:
+        decision = await reserve_audit_slot(
+            cfg,
+            initial_daily_count=daily_count,
+            day_key=day_key,
+            daily_ttl_seconds=daily_ttl,
+        )
+    except Exception as exc:
+        _log.exception("audit_admission_unavailable", error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "AI_AUDIT_ADMISSION_UNAVAILABLE",
+                "message": "AI审核服务暂时不可用，请稍后重试",
+                "retryable": True,
+            },
+            headers={"Retry-After": str(cfg.admission.retry_after_seconds)},
+        ) from exc
+
+    if decision.accepted:
+        return decision.reservation
+
+    if decision.reason == "daily_limit":
+        code = "AI_AUDIT_DAILY_LIMIT_REACHED"
+        message = "AI审核今日接收量已达上限，请稍后再试"
+        limit = cfg.admission.max_daily_tasks
+        current = decision.daily_count
+    else:
+        code = "AI_AUDIT_BUSY"
+        message = "AI审核忙碌中，请稍后重试"
+        limit = cfg.admission.max_pending_tasks
+        current = decision.pending_count
+
+    raise HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail={
+            "code": code,
+            "message": message,
+            "reason": decision.reason,
+            "retryable": True,
+            "limit": limit,
+            "current": current,
+        },
+        headers={"Retry-After": str(cfg.admission.retry_after_seconds)},
+    )
 
 
 def _photo_mapping(photo: TaskPhoto, *, include_url: bool = False) -> dict:
@@ -384,63 +456,89 @@ async def create_audit(
         except json.JSONDecodeError:
             raise HTTPException(400, "metadata 必须是合法 JSON")
 
-    # 上传到对象存储
-    store = get_object_store()
-    manifest_data = await manifest_image.read()
-    if len(manifest_data) > cfg.upload.max_file_size_mb * 1024 * 1024:
-        raise HTTPException(400, f"清单图片超过 {cfg.upload.max_file_size_mb}MB")
-    manifest_key = store.upload_image(manifest_data, ext=_ext_from_filename(manifest_image.filename or "manifest.jpg"))
+    reservation = await _reserve_submission_capacity(session)
+    durable_task_created = False
+    try:
+        # 通过限流后才上传文件，忙碌请求不会留下对象或任务记录。
+        store = get_object_store()
+        manifest_data = await manifest_image.read()
+        if len(manifest_data) > cfg.upload.max_file_size_mb * 1024 * 1024:
+            raise HTTPException(400, f"清单图片超过 {cfg.upload.max_file_size_mb}MB")
+        manifest_key = store.upload_image(
+            manifest_data,
+            ext=_ext_from_filename(manifest_image.filename or "manifest.jpg"),
+        )
 
-    photo_records: list[TaskPhoto] = []
-    for seq, (photo, external_photo_id) in enumerate(
-        zip(photos, normalized_photo_ids),
-        start=1,
-    ):
-        data = await photo.read()
-        if len(data) > cfg.upload.max_file_size_mb * 1024 * 1024:
-            raise HTTPException(400, f"照片 {seq} 超过 {cfg.upload.max_file_size_mb}MB")
-        key = store.upload_image(data, ext=_ext_from_filename(photo.filename or f"photo_{seq}.jpg"))
-        photo_records.append(TaskPhoto(
-            photo_id=_gen_id("ph"),
-            task_id="",  # 稍后填
-            seq=seq,
-            url=key,
-            original_filename=photo.filename or f"photo_{seq}",
-            external_photo_id=external_photo_id,
-        ))
+        photo_records: list[TaskPhoto] = []
+        for seq, (photo, external_photo_id) in enumerate(
+            zip(photos, normalized_photo_ids),
+            start=1,
+        ):
+            data = await photo.read()
+            if len(data) > cfg.upload.max_file_size_mb * 1024 * 1024:
+                raise HTTPException(400, f"照片 {seq} 超过 {cfg.upload.max_file_size_mb}MB")
+            key = store.upload_image(
+                data,
+                ext=_ext_from_filename(photo.filename or f"photo_{seq}.jpg"),
+            )
+            photo_records.append(TaskPhoto(
+                photo_id=_gen_id("ph"),
+                task_id="",  # 稍后填
+                seq=seq,
+                url=key,
+                original_filename=photo.filename or f"photo_{seq}",
+                external_photo_id=external_photo_id,
+            ))
 
-    # 创建任务
-    task_id = _gen_id("aud")
-    task = Task(
-        task_id=task_id,
-        status="pending",
-        current_stage=None,
-        manifest_url=manifest_key,
-        callback_url=callback_url,
-        metadata_=metadata_dict,
-    )
-    session.add(task)
-    await session.flush()
-    for ph in photo_records:
-        ph.task_id = task_id
-        session.add(ph)
-    await session.commit()
+        # 创建任务
+        task_id = _gen_id("aud")
+        task = Task(
+            task_id=task_id,
+            status="pending",
+            current_stage=None,
+            manifest_url=manifest_key,
+            callback_url=callback_url,
+            metadata_=metadata_dict,
+        )
+        session.add(task)
+        await session.flush()
+        for ph in photo_records:
+            ph.task_id = task_id
+            session.add(ph)
+        await session.commit()
+        durable_task_created = True
 
-    # 投递任务到队列
-    run_audit_pipeline.delay(task_id)
-    _log.info("audit_submitted", task_id=task_id,
-              photos=len(photo_records),
-              has_callback=bool(callback_url))
+        # 投递任务到队列
+        run_audit_pipeline.delay(task_id)
+        _log.info("audit_submitted", task_id=task_id,
+                  photos=len(photo_records),
+                  has_callback=bool(callback_url))
 
-    return {
-        "task_id": task_id,
-        "status": "pending",
-        "created_at": task.created_at.isoformat() if task.created_at else None,
-        # v3.8-GG: 返回照片 ID 列表，便于前后端对应
-        "photo_id_list": [ph.photo_id for ph in photo_records],
-        # 客户 photosId ↔ 系统 photo_id 的完整一一映射。
-        "photo_mappings": [_photo_mapping(ph) for ph in photo_records],
-    }
+        return {
+            "task_id": task_id,
+            "status": "pending",
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            # v3.8-GG: 返回照片 ID 列表，便于前后端对应
+            "photo_id_list": [ph.photo_id for ph in photo_records],
+            # 客户 photosId ↔ 系统 photo_id 的完整一一映射。
+            "photo_mappings": [_photo_mapping(ph) for ph in photo_records],
+        }
+    finally:
+        if reservation is not None:
+            try:
+                await release_audit_slot(
+                    cfg,
+                    reservation,
+                    accepted=durable_task_created,
+                )
+            except Exception as exc:
+                # 预留键有 TTL，释放失败不会永久占用容量，也不应把已成功
+                # 创建的任务改成 HTTP 失败。
+                _log.exception(
+                    "audit_admission_release_failed",
+                    accepted=durable_task_created,
+                    error=str(exc),
+                )
 
 
 @router.get("/{task_id}")
