@@ -808,8 +808,8 @@ def audit_callback():
     "message": "AI审核忙碌中，请稍后重试",
     "reason": "queue_full",
     "retryable": true,
-    "limit": 10,
-    "current": 10
+    "limit": 3,
+    "current": 3
   }
 }
 ```
