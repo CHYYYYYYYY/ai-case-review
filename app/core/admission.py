@@ -23,8 +23,9 @@ local daily_key = KEYS[3]
 local max_pending = tonumber(ARGV[1])
 local max_daily = tonumber(ARGV[2])
 local initial_daily = tonumber(ARGV[3])
-local daily_ttl = tonumber(ARGV[4])
-local reservation_ttl = tonumber(ARGV[5])
+local initial_active = tonumber(ARGV[4])
+local daily_ttl = tonumber(ARGV[5])
+local reservation_ttl = tonumber(ARGV[6])
 
 if redis.call('EXISTS', daily_key) == 0 then
   redis.call('SET', daily_key, initial_daily, 'EX', daily_ttl, 'NX')
@@ -33,7 +34,8 @@ end
 local queued = redis.call('LLEN', queue_key)
 local reserved = tonumber(redis.call('GET', reservation_key) or '0')
 local daily = tonumber(redis.call('GET', daily_key) or '0')
-local pending = queued + reserved
+local active = math.max(queued, initial_active)
+local pending = active + reserved
 
 if max_pending > 0 and pending >= max_pending then
   return {0, 1, pending, daily}
@@ -93,6 +95,7 @@ async def reserve_audit_slot(
     cfg: AppConfig,
     *,
     initial_daily_count: int,
+    initial_active_count: int,
     day_key: str,
     daily_ttl_seconds: int,
 ) -> AdmissionDecision:
@@ -111,6 +114,7 @@ async def reserve_audit_slot(
             cfg.admission.max_pending_tasks,
             cfg.admission.max_daily_tasks,
             max(0, initial_daily_count),
+            max(0, initial_active_count),
             daily_ttl_seconds,
             cfg.admission.reservation_ttl_seconds,
         )

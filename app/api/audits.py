@@ -78,10 +78,20 @@ async def _reserve_submission_capacity(
             )
         ).scalar_one()
     )
+    active_count = int(
+        (
+            await session.execute(
+                select(func.count(Task.task_id)).where(
+                    Task.status.in_(("pending", "running")),
+                )
+            )
+        ).scalar_one()
+    )
     try:
         decision = await reserve_audit_slot(
             cfg,
             initial_daily_count=daily_count,
+            initial_active_count=active_count,
             day_key=day_key,
             daily_ttl_seconds=daily_ttl,
         )

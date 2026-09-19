@@ -133,8 +133,8 @@ class AdmissionConfig(BaseModel):
     """Audit submission back-pressure controls.
 
     A value of 0 disables the corresponding limit.  The queue limit counts
-    jobs waiting in Redis (running jobs are not included), while the daily
-    limit counts accepted tasks using Asia/Shanghai calendar days.
+    all unfinished jobs (running plus waiting), while the daily limit counts
+    accepted tasks using Asia/Shanghai calendar days.
     """
 
     enabled: bool = False

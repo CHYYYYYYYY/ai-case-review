@@ -814,7 +814,8 @@ def audit_callback():
 }
 ```
 
-收到 HTTP 429 时服务端不会生成 `task_id`，也不会保存上传文件。调用方应将
+收到 HTTP 429 时服务端不会生成 `task_id`，也不会保存上传文件。排队上限按
+“正在处理 + 排队等待”的未结束任务总数计算。调用方应将
 箱体 AI 审核状态置为“审核忙碌中”，不要标记成“审核失败”。队列上限和每日
 上限分别通过部署配置中的 `admission.max_pending_tasks`、
 `admission.max_daily_tasks` 调整；每日统计按北京时间自然日重置。

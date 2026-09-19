@@ -22,8 +22,11 @@ class _ScalarResult:
 
 
 class _Session:
+    def __init__(self) -> None:
+        self.results = iter((7, 2))
+
     async def execute(self, _query: object) -> _ScalarResult:
-        return _ScalarResult(7)
+        return _ScalarResult(next(self.results))
 
 
 def _config() -> SimpleNamespace:
@@ -78,8 +81,10 @@ async def test_accepted_submission_returns_reservation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     reservation = AdmissionReservation("audit:reservations", "audit:daily:2026-09-18")
+    seen: dict[str, object] = {}
 
     async def accept(*_args: object, **_kwargs: object) -> AdmissionDecision:
+        seen.update(_kwargs)
         return AdmissionDecision(
             accepted=True,
             reason=None,
@@ -92,6 +97,8 @@ async def test_accepted_submission_returns_reservation(
     monkeypatch.setattr(audits, "reserve_audit_slot", accept)
 
     assert await audits._reserve_submission_capacity(_Session()) == reservation  # type: ignore[arg-type]
+    assert seen["initial_daily_count"] == 7
+    assert seen["initial_active_count"] == 2
 
 
 def test_daily_window_uses_shanghai_calendar_day() -> None:
