@@ -64,6 +64,6 @@ task:
 admission:
   enabled: false
   max_pending_tasks: 3
-  max_daily_tasks: 20
+  max_daily_tasks: 100
   retry_after_seconds: 600
   reservation_ttl_seconds: 900

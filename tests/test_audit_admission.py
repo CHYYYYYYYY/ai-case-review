@@ -34,7 +34,7 @@ def _config() -> SimpleNamespace:
         admission=SimpleNamespace(
             enabled=True,
             max_pending_tasks=3,
-            max_daily_tasks=20,
+            max_daily_tasks=100,
             retry_after_seconds=600,
         )
     )
@@ -45,7 +45,7 @@ def _config() -> SimpleNamespace:
     ("reason", "expected_code", "current"),
     [
         ("queue_full", "AI_AUDIT_BUSY", 10),
-        ("daily_limit", "AI_AUDIT_DAILY_LIMIT_REACHED", 20),
+        ("daily_limit", "AI_AUDIT_DAILY_LIMIT_REACHED", 100),
     ],
 )
 async def test_submission_limit_returns_stable_business_code(
@@ -59,7 +59,7 @@ async def test_submission_limit_returns_stable_business_code(
             accepted=False,
             reason=reason,
             pending_count=10,
-            daily_count=20,
+            daily_count=100,
         )
 
     monkeypatch.setattr(audits, "get_config", _config)
@@ -71,7 +71,7 @@ async def test_submission_limit_returns_stable_business_code(
     assert raised.value.status_code == 429
     assert raised.value.detail["code"] == expected_code
     assert raised.value.detail["current"] == current
-    assert raised.value.detail["limit"] == (3 if reason == "queue_full" else 20)
+    assert raised.value.detail["limit"] == (3 if reason == "queue_full" else 100)
     assert raised.value.detail["retryable"] is True
     assert raised.value.headers == {"Retry-After": "600"}
 
