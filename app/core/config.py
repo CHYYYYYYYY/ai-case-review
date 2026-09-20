@@ -138,7 +138,7 @@ class AdmissionConfig(BaseModel):
     """
 
     enabled: bool = False
-    max_pending_tasks: int = 3
+    max_pending_tasks: int = 10
     max_daily_tasks: int = 100
     retry_after_seconds: int = 600
     reservation_ttl_seconds: int = 900

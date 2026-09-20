@@ -33,7 +33,7 @@ def _config() -> SimpleNamespace:
     return SimpleNamespace(
         admission=SimpleNamespace(
             enabled=True,
-            max_pending_tasks=3,
+            max_pending_tasks=10,
             max_daily_tasks=100,
             retry_after_seconds=600,
         )
@@ -71,7 +71,7 @@ async def test_submission_limit_returns_stable_business_code(
     assert raised.value.status_code == 429
     assert raised.value.detail["code"] == expected_code
     assert raised.value.detail["current"] == current
-    assert raised.value.detail["limit"] == (3 if reason == "queue_full" else 100)
+    assert raised.value.detail["limit"] == (10 if reason == "queue_full" else 100)
     assert raised.value.detail["retryable"] is True
     assert raised.value.headers == {"Retry-After": "600"}
 
