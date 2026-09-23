@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 from app.rules.iicl_codes import (
     COMPONENT_CODES,
@@ -97,6 +98,28 @@ LOCATION_FACE_FIX: dict[str, str] = {
     "f": "F",
 }
 
+# Location 的中间数字位常见 OCR 混淆。这里仅在编码结构明确表明该段应为
+# 数字时替换，避免把部件/方向字母误改掉。例如 BLSN -> BL5N。
+LOCATION_DIGIT_FIX = str.maketrans({
+    "O": "0",
+    "Q": "0",
+    "D": "0",
+    "I": "1",
+    "L": "1",
+    "Z": "2",
+    "S": "5",
+    "G": "6",
+    "B": "8",
+})
+
+_LOCATION_PLACEHOLDER_RE = re.compile(r"^[A-Z]XXX$")
+_LOCATION_WITH_N_SUFFIX_RE = re.compile(
+    r"^([A-Z]{2})([0-9OQDILZSGB]+)(N)$"
+)
+_LOCATION_NUMERIC_TAIL_RE = re.compile(
+    r"^([A-Z]{2})([0-9OQDILZSGB]{2,})$"
+)
+
 
 @dataclass
 class FixResult:
@@ -184,25 +207,45 @@ def fix_damage(raw: str | None) -> FixResult:
     return FixResult(original=original, fixed=code, suspicious=True, changed=False)
 
 
-def fix_location_face(raw: str | None) -> FixResult:
-    """修正 Location 面代码(仅首字母)."""
+def fix_location_code(raw: str | None) -> FixResult:
+    """按 Location 编码结构修正常见 OCR 混淆。
+
+    除了历史的首字母纠错，还会修正确定处于数字段中的字母，例如
+    ``BLSN``（估价单实际为 ``BL5N``）和 ``UXI5``（``UX15``）。
+    ``IXXX`` 这类业务占位值保持不变。
+    """
     if not raw:
         return FixResult(original="", fixed=None, suspicious=False, changed=False)
-    code = raw.strip()
+    code = re.sub(r"\s+", "", raw.strip().upper())
     original = code
-    head = code[0].upper()
+    if not code:
+        return FixResult(original="", fixed=None, suspicious=False, changed=False)
+    if _LOCATION_PLACEHOLDER_RE.fullmatch(code):
+        return FixResult(original=original, fixed=code, suspicious=False, changed=False)
+
+    head = code[0]
     rest = code[1:]
 
-    if head in LOCATION_FACE_CODES:
-        return FixResult(original=original, fixed=head + rest, suspicious=False, changed=False)
-
     if head in LOCATION_FACE_FIX:
-        fixed_head = LOCATION_FACE_FIX[head]
-        return FixResult(
-            original=original,
-            fixed=fixed_head + rest,
-            suspicious=True,
-            changed=True,
-        )
+        head = LOCATION_FACE_FIX[head]
+        code = head + rest
 
-    return FixResult(original=original, fixed=code, suspicious=True, changed=False)
+    match = _LOCATION_WITH_N_SUFFIX_RE.fullmatch(code)
+    if match:
+        code = f"{match.group(1)}{match.group(2).translate(LOCATION_DIGIT_FIX)}{match.group(3)}"
+    else:
+        match = _LOCATION_NUMERIC_TAIL_RE.fullmatch(code)
+        if match:
+            code = f"{match.group(1)}{match.group(2).translate(LOCATION_DIGIT_FIX)}"
+
+    return FixResult(
+        original=original,
+        fixed=code,
+        suspicious=head not in LOCATION_FACE_CODES,
+        changed=code != original,
+    )
+
+
+def fix_location_face(raw: str | None) -> FixResult:
+    """兼容旧调用名；新逻辑会校正完整 Location 编码。"""
+    return fix_location_code(raw)

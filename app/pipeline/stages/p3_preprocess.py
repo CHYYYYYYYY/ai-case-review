@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from app.core.logging import get_logger
 from app.pipeline.stages.base import BaseStage, StageResult, Timer
-from app.rules.code_fix import fix_component, fix_damage, fix_location_face
+from app.rules.code_fix import fix_component, fix_damage, fix_location_code
 from app.rules.handwriting_match import match_location
 from app.rules.mco_rules import (
     MCOVerdict,
@@ -42,7 +42,7 @@ class P3PreprocessStage(BaseStage):
                 item.damage_code = dmg_fix.output
                 item.damage_suspicious = dmg_fix.suspicious
 
-                loc_fix = fix_location_face(item.raw_location_code)
+                loc_fix = fix_location_code(item.raw_location_code)
                 item.location_code = loc_fix.output
                 item.location_suspicious = loc_fix.suspicious
 

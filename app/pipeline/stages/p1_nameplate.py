@@ -12,12 +12,9 @@ from app.core.logging import get_logger
 from app.llm.prompt_loader import render_prompt
 from app.pipeline.schemas import ManifestItem, PipelineContext
 from app.pipeline.stages.base import BaseStage, StageResult, Timer
+from app.rules.container_number import normalize_container_number
 
 _log = get_logger(__name__)
-
-# 11 位箱号正则: 4 字母 + 7 数字
-_CONTAINER_NO_RE = re.compile(r"^[A-Z]{4}\d{7}$")
-
 
 def _optional_number(value: object) -> float | None:
     """把 OCR 金额安全转成数值；无法可靠解析时保留为空。"""
@@ -64,9 +61,9 @@ class P1NameplateStage(BaseStage):
                     continue
 
                 has_plate = parsed.get("has_plate", False)
-                number = parsed.get("container_number")
-                if has_plate and number and _CONTAINER_NO_RE.match(str(number).upper()):
-                    container_number = str(number).upper()
+                number = normalize_container_number(parsed.get("container_number"))
+                if has_plate and number:
+                    container_number = number
                     self.ctx.container_number_source = "photo"
                     self.ctx.container_source_photo_id = photo.photo_id
                     confidence = _optional_number(
@@ -174,9 +171,9 @@ class P1ManifestOCRStage(BaseStage):
 
             # 如果 P1-A 未识别箱号, 用清单上的兜底
             if not self.ctx.container_number:
-                manifest_cn = data.get("container_number")
-                if manifest_cn and _CONTAINER_NO_RE.match(str(manifest_cn).upper()):
-                    self.ctx.container_number = str(manifest_cn).upper()
+                manifest_cn = normalize_container_number(data.get("container_number"))
+                if manifest_cn:
+                    self.ctx.container_number = manifest_cn
                     self.ctx.container_number_source = "manifest"
                     self.ctx.container_number_confidence = None
                     self.ctx.container_source_photo_id = None

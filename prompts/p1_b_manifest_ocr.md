@@ -31,6 +31,8 @@ Repair Code | Component | Repair Type | Length | Width | Pieces | Location | Dam
 
 === OCR常见混淆提醒 ===
 - O(欧) vs Q vs 0(零)：MCO常被误读为MCQ
+- Location 编码中的数字 5 很容易被读成字母 S。请放大核对字符形状和同一行列位置，
+  例如 `BL5N` 不要写成 `BLSN`；仍看不清才使用 `[模糊]`。
 - 不确定的字符用[模糊]标记
 
 Strict Rules:

@@ -13,7 +13,11 @@ from app.pipeline.schemas import (
     PipelineContext,
 )
 from app.rules.candidate_pool import build_candidate_pool, is_hard_excluded
-from app.rules.code_fix import fix_component, fix_damage, fix_location_face
+from app.rules.code_fix import fix_component, fix_damage, fix_location_code
+from app.rules.container_number import (
+    is_valid_container_number,
+    normalize_container_number,
+)
 from app.rules.direction_calc import compute_direction
 from app.rules.handwriting_match import match_location
 from app.rules.iicl_codes import is_valid_component, is_valid_damage
@@ -31,6 +35,27 @@ def test_component_fix_mco():
     r = fix_component("MCQ")
     assert r.fixed == "MCO"
     assert r.changed
+
+
+def test_location_fix_repairs_digit_five_misread_as_s():
+    result = fix_location_code("BLSN")
+    assert result.fixed == "BL5N"
+    assert result.changed
+    assert not result.suspicious
+
+
+def test_location_fix_repairs_numeric_tail_but_preserves_placeholder():
+    assert fix_location_code("UXI5").fixed == "UX15"
+    assert fix_location_code("IXXX").fixed == "IXXX"
+
+
+def test_container_number_normalizes_position_specific_ocr_confusion():
+    assert normalize_container_number("00LU O464523") == "OOLU0464523"
+
+
+def test_container_number_rejects_bad_iso_check_digit():
+    assert is_valid_container_number("CBHU4391461")
+    assert normalize_container_number("CBHU4391462") is None
 
 
 def test_handwriting_exact_match():
