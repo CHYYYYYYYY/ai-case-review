@@ -284,11 +284,16 @@ class Orchestrator:
             from datetime import datetime, timezone
             task.finished_at = datetime.now(timezone.utc)
 
-            report_row = AuditReport(
-                task_id=self.ctx.task_id,
-                report=self.ctx.report,
-            )
-            session.add(report_row)
+            # 成功任务也允许重新触发流水线。已有报告必须原位更新，不能再次
+            # INSERT 同一主键，否则生产纠错回放会在最后一步失败。
+            report_row = session.get(AuditReport, self.ctx.task_id)
+            if report_row:
+                report_row.report = self.ctx.report
+            else:
+                session.add(AuditReport(
+                    task_id=self.ctx.task_id,
+                    report=self.ctx.report,
+                ))
             session.commit()
         finally:
             session.close()
